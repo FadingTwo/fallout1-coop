@@ -11,6 +11,11 @@ You need your own copy of Fallout (GOG or Steam). No game files are
 included. Co-op is off by default: without it the game plays exactly like
 Fallout CE.
 
+Co-op lives in Fallout's own main menu: **MULTIPLAYER** opens hosting,
+joining, one-PC play, updates and bug reports.
+
+![Fallout's main menu with the new MULTIPLAYER button, and the MULTIPLAYER menu: host game, join game, one PC, update, report bug](docs/coop/menus.jpg)
+
 - [COOP.md](COOP.md): how to play, the rules, and the settings
 - [docs/coop/ARCHITECTURE.md](docs/coop/ARCHITECTURE.md): how it works
 - [docs/coop/SERVER.md](docs/coop/SERVER.md): running your own server
