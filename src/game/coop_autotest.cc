@@ -86,6 +86,9 @@ static void coop_autotest_host_frame();
 static bool coop_autotest_players_together(const char* when);
 static int coop_autotest_combat(AutotestNewGameProc* newGame);
 static bool coop_autotest_attack_turn(Object* player);
+static bool coop_autotest_shoot_turn(Object* player);
+static bool coop_autotest_video();
+static void coop_autotest_video_start();
 static bool coop_autotest_pass_turn(Object* player);
 static Object* coop_autotest_spawn_enemy(Object* nextTo);
 static int coop_autotest_join(AutotestNewGameProc* newGame);
@@ -1477,6 +1480,14 @@ static int coop_autotest_net_combat_player2_turns = 0;
 
 static bool coop_autotest_net_combat_turn(Object* player)
 {
+    // For the video both players shoot, player 2's turns played here.
+    if (coop_autotest_video()) {
+        if (player != coop_player(0)->obj) {
+            coop_autotest_net_combat_player2_turns++;
+        }
+        return coop_autotest_shoot_turn(player);
+    }
+
     if (player == coop_player(0)->obj) {
         // COOP_AUTOTEST_COMBAT_CHAT: player 1 chats in their first turn
         // (the space must not end it), then ends it with Space.
@@ -1551,6 +1562,7 @@ static int coop_autotest_net_combat_host(AutotestNewGameProc* newGame)
     }
 
     coop_autotest_scene();
+    coop_autotest_video_start();
 
     Object* enemy = coop_autotest_spawn_enemy(coop_player(0)->obj);
     if (enemy == NULL) {
@@ -1624,9 +1636,14 @@ static int coop_autotest_net_combat_client(AutotestNewGameProc* newGame)
         inject_key(KEY_RETURN);
         inject_wait(30);
     }
-    inject_call(coop_autotest_press_space_forever);
-    if (getenv("COOP_AUTOTEST_MAP") != NULL) {
-        inject_call(coop_autotest_screenshot_forever);
+    if (coop_autotest_video()) {
+        // The host plays player 2's turns for the video.
+        coop_autotest_video_start();
+    } else {
+        inject_call(coop_autotest_press_space_forever);
+        if (getenv("COOP_AUTOTEST_MAP") != NULL) {
+            inject_call(coop_autotest_screenshot_forever);
+        }
     }
 
     int rc = coop_net_client_run();
@@ -1797,6 +1814,27 @@ static bool coop_autotest_pass_turn(Object* player)
     return true;
 }
 
+// Fires the equipped weapon at the enemy, for the video.
+static bool coop_autotest_shoot_turn(Object* player)
+{
+    coop_autotest_count_turn(player);
+
+    Object* enemy = coop_autotest_enemy;
+    if (enemy != NULL && !critter_is_dead(enemy)) {
+        // Let the last move finish first, and this shot after.
+        combat_turn_run();
+        autotest_log("%s shoots %s", critter_name(player), critter_name(enemy));
+        combat_attack(player, enemy, HIT_MODE_RIGHT_WEAPON_PRIMARY, HIT_LOCATION_UNCALLED);
+        combat_turn_run();
+    }
+
+    if (enemy != NULL && critter_is_dead(enemy)) {
+        combat_end();
+    }
+
+    return true;
+}
+
 // Spawns a "Cave Rat" next to `nextTo`, with few hit
 // points.
 static Object* coop_autotest_spawn_enemy(Object* nextTo)
@@ -1823,7 +1861,12 @@ static Object* coop_autotest_spawn_enemy(Object* nextTo)
         return NULL;
     }
 
-    obj_attempt_placement(enemy, nextTo->tile, nextTo->elevation, 1);
+    int tile = nextTo->tile;
+    if (coop_autotest_video()) {
+        // Some distance, so the shots show.
+        tile = tile_num_in_direction(tile, 1, 5);
+    }
+    obj_attempt_placement(enemy, tile, nextTo->elevation, 1);
     const char* enemyHits = getenv("COOP_AUTOTEST_ENEMY_HP");
     int hits = enemyHits != NULL ? atoi(enemyHits) : 3;
     critter_adjust_hits(enemy, hits - critter_get_hits(enemy));
@@ -1867,6 +1910,24 @@ static void coop_autotest_scene()
     map_leave_map(&transition);
     map_check_state();
     autotest_log("scene: %s", map_data.name);
+
+    if (coop_autotest_video()) {
+        // Noon, loaded guns in the active hand.
+        set_game_time(game_time() / 864000 * 864000 + 12 * 36000);
+        for (int index = 0; index < 2; index++) {
+            PlayerState* player = coop_player(index);
+            Object* weapon = inven_right_hand(player->obj);
+            if (weapon != NULL) {
+                item_w_set_curr_ammo(weapon, item_w_max_ammo(weapon));
+                // The gun in their hands (as switching hands does).
+                Object* obj = player->obj;
+                int fid = art_id(OBJ_TYPE_CRITTER, obj->fid & 0xFFF, ANIM_STAND, item_w_anim_code(weapon), obj->rotation + 1);
+                obj_change_fid(obj, fid, NULL);
+            }
+            player->currentHand = HAND_RIGHT;
+        }
+        intface_update_items(false);
+    }
 }
 
 static bool coop_autotest_players_together(const char* when)
@@ -2276,6 +2337,34 @@ static int coop_autotest_video_dump(int width, int height, unsigned char* buffer
 static bool coop_autotest_video()
 {
     return getenv("COOP_AUTOTEST_VIDEO") != NULL;
+}
+
+// For scripts without their own frame pacing (the fight): a video frame
+// every 100 ms from the screen updates, so animations are recorded too.
+// Chained after the present hook already set (the host's frame sender).
+static void (*coop_autotest_video_next_hook)() = NULL;
+
+static void coop_autotest_video_frame()
+{
+    if (coop_autotest_video_next_hook != NULL) {
+        coop_autotest_video_next_hook();
+    }
+
+    static unsigned int last = 0;
+    unsigned int now = SDL_GetTicks();
+    if (now - last >= 100) {
+        last = now;
+        dump_screen();
+    }
+}
+
+static void coop_autotest_video_start()
+{
+    if (coop_autotest_video() && svga_present_hook != coop_autotest_video_frame) {
+        register_screendump(KEY_F12, coop_autotest_video_dump);
+        coop_autotest_video_next_hook = svga_present_hook;
+        svga_present_hook = coop_autotest_video_frame;
+    }
 }
 
 // Player 1 strolls to a free tile a few hexes away.
