@@ -27,11 +27,15 @@ Download the package for your system under
 [Releases](https://github.com/FadingTwo/fallout1-coop/releases), or build
 it yourself (see the end of this page).
 
-- **Windows:** unzip and copy `fallout-ce.exe` into your Fallout folder.
-- **Linux:** needs SDL2 (`sudo apt install libsdl2-2.0-0`). Copy
-  `fallout-ce` into your Fallout folder and run it.
+Unpack it into a folder of its own (not into the Fallout folder) and run it:
 
-The first start shows a setup screen that finds your Fallout files. Then
+- **Windows:** `fallout-ce.exe`. It isn't code-signed, so SmartScreen may
+  warn; choose *More info → Run anyway*.
+- **Linux:** needs SDL2 (`sudo apt install libsdl2-2.0-0`), then
+  `./fallout-ce`.
+
+The first start shows a setup screen that finds your Fallout installation
+(GOG, Steam and others) and reads the game from there. Then
 pick **MULTIPLAYER** in the main menu. Without a co-op server (see
 [docs/coop/SERVER.md](docs/coop/SERVER.md)) you play on a LAN, on one PC,
 or online by entering the host's address.
@@ -50,6 +54,8 @@ For more about the engine itself (other platforms, `fallout.cfg`,
 - [docs/coop/HOW-IT-WAS-MADE.md](docs/coop/HOW-IT-WAS-MADE.md): how it
   was built, and why it works the way it does
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [ROADMAP.md](ROADMAP.md): Fallout 1 now, then Fallout 2, then big Fallout 2
+  mods (Sonora, Nevada, Olympus 2077)
 - [Ideas](https://github.com/FadingTwo/fallout1-coop/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement):
   what could come next; comment or add a 👍 to the ones you want
 
