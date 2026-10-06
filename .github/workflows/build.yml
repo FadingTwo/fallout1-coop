@@ -20,12 +20,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build libsdl2-dev
           pip install ziglang==0.16.0
+          # Ubuntu keeps SDL's real config header in the multiarch include
+          # directory, which zig doesn't search: one directory with both.
+          cp -r /usr/include/SDL2 "$RUNNER_TEMP/sdl2"
+          cp /usr/include/x86_64-linux-gnu/SDL2/_real_SDL_config.h "$RUNNER_TEMP/sdl2/SDL_config.h"
 
       - name: Build
-        env:
-          SDL2_INCLUDE_DIRS: /usr/include/SDL2
-          SDL2_LIBRARIES: /usr/lib/x86_64-linux-gnu/libSDL2.so
-        run: tools/build-release.sh dist
+        run: |
+          SDL2_INCLUDE_DIRS="$RUNNER_TEMP/sdl2" \
+          SDL2_LIBRARIES=/usr/lib/x86_64-linux-gnu/libSDL2.so \
+          tools/build-release.sh dist
 
       - uses: actions/upload-artifact@v4
         with:
