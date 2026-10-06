@@ -6,6 +6,7 @@
 #include "game/anim.h"
 #include "game/combatai.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -284,6 +285,10 @@ int partyMemberPrepLoad()
             script->scr_flags &= ~(SCRIPT_FLAG_0x08 | SCRIPT_FLAG_0x10);
 
             scr_remove(script->scr_id);
+        } else if (coop_player_of(partyMember->object) != NULL) {
+            // Co-op: player 2 has no script of its own, but scripted items
+            // they carry must move to the next map like everyone else's.
+            partyMemberItemSaveAll(partyMember->object);
         } else {
             debug_printf("\n  Error!: partyMemberPrepLoad: Can't find script!");
         }
@@ -422,8 +427,14 @@ int partyMemberSyncPosition()
     int index;
     PartyMember* partyMember;
 
-    for (index = 1; index < partyMemberCount; index++) {
+    // Co-op: obj_dude may be player 2, in which case player 1 (always the
+    // first party member) gathers around them too.
+    for (index = 0; index < partyMemberCount; index++) {
         partyMember = &(partyMemberList[index]);
+        if (partyMember->object == obj_dude) {
+            continue;
+        }
+
         if ((partyMember->object->flags & OBJECT_HIDDEN) == 0) {
             obj_attempt_placement(partyMember->object, obj_dude->tile, obj_dude->elevation, 2);
         }
@@ -852,7 +863,7 @@ static int partyFixMultipleMembers()
 
         if (scr_ptr(object->sid, &script) != -1) {
             script->owner = object;
-        } else {
+        } else if (coop_player_of(object) == NULL) {
             debug_printf("\nError: Failed to fix party member critter scripts!");
         }
     }

@@ -1267,13 +1267,15 @@ int db_freadLong(DB_FILE* stream, unsigned long* l)
 // 0x4B0820
 int db_freadFloat(DB_FILE* stream, float* q)
 {
-    unsigned long l;
+    int value;
 
-    if (db_freadLong(stream, &l) == -1) {
+    if (db_freadInt(stream, &value) == -1) {
         return -1;
     }
 
-    *q = *(float*)&l;
+    // CE: Reinterpret the 32 bits. Going through `unsigned long` (64-bit on
+    // some platforms) read past the float.
+    memcpy(q, &value, sizeof(*q));
 
     return 0;
 }
@@ -1329,8 +1331,11 @@ int db_fwriteLong(DB_FILE* stream, unsigned long l)
 // 0x4B099C
 int db_fwriteFloat(DB_FILE* stream, float q)
 {
-    // NOTE: Uninline.
-    return db_fwriteLong(stream, *(unsigned long*)&q);
+    // CE: Reinterpret the 32 bits. Going through `unsigned long` (64-bit on
+    // some platforms) read past the float.
+    int value;
+    memcpy(&value, &q, sizeof(value));
+    return db_fwriteInt(stream, value);
 }
 
 // 0x4B09D4

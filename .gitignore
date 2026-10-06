@@ -391,3 +391,18 @@ FodyWeavers.xsd
 # CMake
 /out
 /build
+
+# Fallout game data - NEVER commit (copyrighted, owned by the player)
+*.[Dd][Aa][Tt]
+*.[Mm][Vv][Ee]
+*.[Aa][Cc][Mm]
+*.[Ff][Rr][Mm]
+*.[Gg][Cc][Dd]
+*.[Ss][Aa][Vv]
+/[Dd][Aa][Tt][Aa]/
+/[Ss][Aa][Vv][Ee][Gg][Aa][Mm][Ee]/
+[Ff][Aa][Ll][Ll][Oo][Uu][Tt].[Cc][Ff][Gg]
+/run/
+
+# Website screenshots (made from the game, not committed)
+site/shots/

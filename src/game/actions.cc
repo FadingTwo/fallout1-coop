@@ -7,6 +7,7 @@
 #include "game/combat.h"
 #include "game/combatai.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -1806,6 +1807,13 @@ int action_talk_to(Object* a1, Object* a2)
         return -1;
     }
 
+    // Co-op: only player 1 talks; the others may trade with merchants.
+    if (!coop_primary_is_active() && !coop_can_barter_with(a2)) {
+        char message[] = "Only player 1 can talk to people.";
+        display_print(message);
+        return -1;
+    }
+
     if (FID_TYPE(a2->fid) != OBJ_TYPE_CRITTER) {
         return -1;
     }
@@ -1854,6 +1862,13 @@ static int can_talk_to(Object* a1, Object* a2)
 // 0x413200
 static int talk_to(Object* a1, Object* a2)
 {
+    // Co-op: conversations are player 1's; other players trade directly.
+    PlayerState* player = coop_player_of(a1);
+    if (player != NULL && player != coop_player(0)) {
+        coop_request_barter(player, a2);
+        return 0;
+    }
+
     scripts_request_dialog(a2);
     return 0;
 }

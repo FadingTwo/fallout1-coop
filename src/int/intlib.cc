@@ -1,6 +1,7 @@
 #include "int/intlib.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "int/datafile.h"
 #include "int/dialog.h"

@@ -6,6 +6,7 @@
 #include "game/anim.h"
 #include "game/automap.h"
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -116,13 +117,16 @@ static int drug_pid[7] = {
 static MessageList item_message_file;
 
 // 0x59CF10
-static int wd_onset;
+// Per player, see coop.h.
+#define wd_onset (coop_active_player()->withdrawalOnset)
 
 // 0x59CF14
-static Object* wd_obj;
+// Per player, see coop.h.
+#define wd_obj (coop_active_player()->withdrawalObj)
 
 // 0x59CF18
-static int wd_gvar;
+// Per player, see coop.h.
+#define wd_gvar (coop_active_player()->withdrawalGvar)
 
 // 0x469C10
 int item_init()

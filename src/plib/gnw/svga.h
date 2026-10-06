@@ -14,6 +14,7 @@ extern ScreenBlitFunc* scr_blit;
 
 extern SDL_Window* gSdlWindow;
 extern SDL_Surface* gSdlSurface;
+extern void (*svga_present_hook)();
 extern SDL_Renderer* gSdlRenderer;
 extern SDL_Texture* gSdlTexture;
 extern SDL_Surface* gSdlTextureSurface;

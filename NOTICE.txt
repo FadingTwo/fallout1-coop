@@ -1,0 +1,15 @@
+Fallout Co-op
+
+This is a modified version of Fallout Community Edition
+(https://github.com/alexbatalov/fallout1-ce) by Alexander Batalov,
+distributed free of charge for non-commercial use under the Sustainable
+Use License (LICENSE.md).
+
+Changes: two-player co-op (local and over the network), a multiplayer
+menu, a first-run setup screen, self-update and bug reports. See COOP.md.
+
+You need your own copy of Fallout (GOG or Steam) to play; no game data
+is included.
+
+The setup screen's font is derived from Noto Sans Mono (SIL Open Font
+License 1.1, OFL-NotoSansMono.txt).

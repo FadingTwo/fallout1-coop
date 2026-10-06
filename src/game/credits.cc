@@ -41,6 +41,23 @@ static int name_font;
 // 0x56BEF0
 static int title_color;
 
+// Co-op: added after the game's own credits (same format: '@' title,
+// '#' highlighted name).
+static const char* credits_coop_lines[] = {
+    "",
+    "",
+    "@FALLOUT CO-OP",
+    "",
+    "#Built on Fallout Community Edition",
+    "by Alexander Batalov",
+    "",
+    "@SPECIAL THANKS",
+    "",
+    "#Mondilesh",
+    "for spotting Jet in Fallout 1",
+};
+static size_t credits_coop_next = 0;
+
 // 0x426FE0
 void credits(const char* filePath, int backgroundFid, bool useReversedStyle)
 {
@@ -61,6 +78,9 @@ void credits(const char* filePath, int backgroundFid, bool useReversedStyle)
     }
 
     soundUpdate();
+
+    // The co-op lines follow the game's credits (not other texts).
+    credits_coop_next = compat_stricmp(filePath, "credits.txt") == 0 ? 0 : sizeof(credits_coop_lines) / sizeof(credits_coop_lines[0]);
 
     char localizedPath[COMPAT_MAX_PATH];
     if (message_make_path(localizedPath, sizeof(localizedPath), filePath)) {
@@ -301,11 +321,24 @@ void credits(const char* filePath, int backgroundFid, bool useReversedStyle)
     text_font(oldFont);
 }
 
+
 // 0x42777C
 static bool credits_get_next_line(char* dest, int* font, int* color)
 {
+    const size_t coopLineCount = sizeof(credits_coop_lines) / sizeof(credits_coop_lines[0]);
+
     char string[256];
-    while (db_fgets(string, 256, credits_file)) {
+    for (;;) {
+        if (db_fgets(string, 256, credits_file) == NULL) {
+            // The game's credits are done: the co-op ones.
+            if (credits_coop_next >= coopLineCount) {
+                return false;
+            }
+            // With the newline, like the lines read from the file (an empty
+            // line would leave the previous line's last row behind).
+            snprintf(string, sizeof(string), "%s\n", credits_coop_lines[credits_coop_next++]);
+        }
+
         char* pch;
         if (string[0] == ';') {
             continue;
@@ -327,8 +360,6 @@ static bool credits_get_next_line(char* dest, int* font, int* color)
 
         return true;
     }
-
-    return false;
 }
 
 } // namespace fallout

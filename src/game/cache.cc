@@ -25,6 +25,14 @@ static bool cache_resize_array(Cache* cache, int newCapacity);
 static int cache_compare_make_room(const void* a1, const void* a2);
 static int cache_compare_reset_counter(const void* a1, const void* a2);
 
+// How many cache reads are in progress (see cache_add).
+static int cache_loading_depth = 0;
+
+bool cache_is_loading()
+{
+    return cache_loading_depth > 0;
+}
+
 // 0x4FEC7C
 static int lock_sound_ticker = 0;
 
@@ -415,7 +423,13 @@ static bool cache_add(Cache* cache, int key, int* indexPtr)
                 break;
             }
 
-            if (cache->readProc(key, &size, cacheEntry->data) != 0) {
+            // CE: reading can call back into the game (the mouse refresh
+            // while a map loads), which must not use a cache meanwhile: it
+            // could move or free blocks while this one is being filled.
+            cache_loading_depth++;
+            bool readFailed = cache->readProc(key, &size, cacheEntry->data) != 0;
+            cache_loading_depth--;
+            if (readFailed) {
                 break;
             }
 

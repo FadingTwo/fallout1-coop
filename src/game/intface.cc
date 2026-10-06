@@ -9,6 +9,7 @@
 #include "game/art.h"
 #include "game/combat.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/display.h"
@@ -86,16 +87,6 @@ typedef struct IndicatorDescription {
     // denoted by [isBad] property.
     unsigned char* data;
 } IndicatorDescription;
-
-typedef struct InterfaceItemState {
-    Object* item;
-    unsigned char isDisabled;
-    unsigned char isWeapon;
-    int primaryHitMode;
-    int secondaryHitMode;
-    int action;
-    int itemFid;
-} InterfaceItemState;
 
 static int intface_init_items();
 static int intface_redraw_items();
@@ -202,7 +193,8 @@ static CacheEntry* itemButtonDownKey = NULL;
 static CacheEntry* itemButtonDisabledKey = NULL;
 
 // 0x505578
-static int itemCurrentItem = HAND_LEFT;
+// Per player, see coop.h.
+#define itemCurrentItem (coop_active_player()->currentHand)
 
 // 0x50557C
 static Rect itemButtonRect = { 267, 26, 455, 93 };
@@ -279,7 +271,8 @@ int bar_window = -1;
 static int bboxslot[INDICATOR_SLOTS_COUNT];
 
 // 0x595680
-static InterfaceItemState itemButtonItems[HAND_COUNT];
+// Per player, see coop.h.
+#define itemButtonItems (coop_active_player()->hands)
 
 // 0x5956CC
 static CacheEntry* moveLightYellowKey;

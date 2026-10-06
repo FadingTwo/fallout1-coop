@@ -1,5 +1,7 @@
 #include "plib/gnw/gnw.h"
 
+#include <string.h>
+
 #include <algorithm>
 
 #include "game/palette.h"

@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "game/coop.h"
 #include "game/game.h"
 #include "game/gconfig.h"
 #include "game/message.h"
@@ -100,7 +101,8 @@ static PerkDescription perk_data[PERK_COUNT] = {
 };
 
 // 0x662964
-static int perk_lev[PERK_COUNT];
+// Per player, see coop.h.
+#define perk_lev (coop_active_player()->perkLevels)
 
 // perk.msg
 //

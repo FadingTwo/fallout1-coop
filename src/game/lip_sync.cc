@@ -172,6 +172,13 @@ int lips_play_speech()
 
     speechStartTime = get_time();
 
+    // CE: Lets a co-op client hear conversations too.
+    if (gsound_event_hook != NULL) {
+        char name[COMPAT_MAX_PATH];
+        snprintf(name, sizeof(name), "%s\\%s", lips_subdir_name, lips_fix_string(lip_info.file_name, sizeof(lip_info.file_name)));
+        gsound_event_hook(GSOUND_EVENT_SPEECH, name, 0, 0, 0);
+    }
+
     if (soundPlay(lip_info.sound) != 0) {
         debug_printf("Failed play!\n");
 
@@ -185,6 +192,10 @@ int lips_play_speech()
 // 0x46CE9C
 static int lips_stop_speech()
 {
+    if (gsound_event_hook != NULL) {
+        gsound_event_hook(GSOUND_EVENT_SPEECH_STOP, "", 0, 0, 0);
+    }
+
     head_marker_current = 0;
     soundStop(lip_info.sound);
     lip_info.flags &= ~(LIPS_FLAG_0x01 | LIPS_FLAG_0x02);

@@ -5,6 +5,7 @@
 
 #include "game/anim.h"
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/display.h"
 #include "game/editor.h"
 #include "game/endgame.h"
@@ -91,16 +92,25 @@ int rad_bonus[RADIATION_LEVEL_COUNT][RADIATION_EFFECT_COUNT] = {
 static MessageList critter_scrmsg_file;
 
 // 0x56BEFC
-static char pc_name[DUDE_NAME_MAX_LENGTH];
+// Per player, see coop.h.
+#define pc_name (coop_active_player()->name)
 
 // 0x56BF1C
-static int sneak_working;
+// Per player, see coop.h.
+#define sneak_working (coop_active_player()->sneakWorking)
 
 // 0x56BF24
-static int pc_kill_counts[KILL_TYPE_COUNT];
+// Per player, see coop.h.
+#define pc_kill_counts (coop_active_player()->killCounts)
 
 // 0x56BF20
-static int old_rad_level;
+// Per player, see coop.h.
+#define old_rad_level (coop_active_player()->oldRadLevel)
+
+// The critter whose radiation events get_rad_damage_level and
+// clear_rad_damage look at. (Co-op: every player has their own;
+// single-player only has the dude's.)
+static Object* rad_owner = NULL;
 
 // 0x427860
 int critter_init()
@@ -180,8 +190,9 @@ char* critter_name(Object* critter)
     // 0x504D40
     static char* _name_critter = _aCorpse;
 
-    if (critter == obj_dude) {
-        return pc_name;
+    PlayerState* player = coop_player_of(critter);
+    if (player != NULL) {
+        return player->name;
     }
 
     if (critter->field_80 == -1) {
@@ -431,6 +442,7 @@ int critter_check_rads(Object* obj)
     }
 
     old_rad_level = 0;
+    rad_owner = obj;
 
     queue_clear_type(EVENT_TYPE_RADIATION, get_rad_damage_level);
 
@@ -477,6 +489,10 @@ static int get_rad_damage_level(Object* obj, void* data)
 {
     RadiationEvent* radiationEvent = (RadiationEvent*)data;
 
+    if (obj != rad_owner) {
+        return 0;
+    }
+
     old_rad_level = radiationEvent->radiationLevel;
 
     return 0;
@@ -486,6 +502,10 @@ static int get_rad_damage_level(Object* obj, void* data)
 static int clear_rad_damage(Object* obj, void* data)
 {
     RadiationEvent* radiationEvent = (RadiationEvent*)data;
+
+    if (obj != rad_owner) {
+        return 0;
+    }
 
     if (radiationEvent->isHealing) {
         process_rads(obj, radiationEvent->radiationLevel, true);
@@ -550,6 +570,11 @@ static void process_rads(Object* obj, int radiationLevel, bool isHealing)
 int critter_process_rads(Object* obj, void* data)
 {
     RadiationEvent* radiationEvent = (RadiationEvent*)data;
+
+    // A player's sickness, with their messages on their screen.
+    PlayerState* player = coop_player_of(obj);
+    ActivePlayerScope scope(player != NULL ? player : coop_active_player());
+    rad_owner = obj;
     if (!radiationEvent->isHealing) {
         // Schedule healing stats event in 7 days.
         RadiationEvent* newRadiationEvent = (RadiationEvent*)mem_malloc(sizeof(*newRadiationEvent));

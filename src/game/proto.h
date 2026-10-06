@@ -133,6 +133,7 @@ int proto_update_gen(Object* obj);
 int proto_update_init(Object* obj);
 int proto_dude_update_gender();
 int proto_dude_init(const char* path);
+void proto_player2_reset();
 int proto_data_member(int pid, int member, ProtoDataMemberValue* value);
 int proto_init();
 void proto_reset();

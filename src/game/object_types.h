@@ -39,6 +39,9 @@ typedef enum OutlineType {
     OUTLINE_TYPE_4 = 4,
     OUTLINE_TYPE_FRIENDLY = 8,
     OUTLINE_TYPE_ITEM = 16,
+    // Co-op: the other players, see coop_outline_type().
+    OUTLINE_TYPE_COOP_PLAYER1 = 32,
+    OUTLINE_TYPE_COOP_PLAYER2 = 64,
 } OutlineType;
 
 typedef enum ObjectFlags {

@@ -10,6 +10,7 @@
 #include "plib/gnw/dxinput.h"
 #include "plib/gnw/gnw.h"
 #include "plib/gnw/grbuf.h"
+#include "plib/gnw/inject.h"
 #include "plib/gnw/intrface.h"
 #include "plib/gnw/memory.h"
 #include "plib/gnw/svga.h"
@@ -203,6 +204,26 @@ int get_input()
     return -1;
 }
 
+int get_injected_input()
+{
+    if (!inject_update()) {
+        return -1;
+    }
+
+    int buttonCode = win_check_all_buttons();
+    if (buttonCode != -1) {
+        GNW_add_input_buffer(buttonCode);
+    }
+
+    int keyCode = get_input_buffer();
+    if (keyCode == -1 && mouse_get_buttons() & 0x33) {
+        mouse_get_position(&input_mx, &input_my);
+        return -2;
+    }
+
+    return GNW_check_menu_bars(keyCode);
+}
+
 // 0x4B3418
 void get_input_position(int* x, int* y)
 {
@@ -211,19 +232,36 @@ void get_input_position(int* x, int* y)
 }
 
 // 0x4B342C
+// CE: Called first thing every frame of every input loop, e.g. to receive
+// a co-op client's input. NULL when unused.
+void (*input_poll_hook)() = NULL;
+
 void process_bk()
 {
     int v1;
 
+    if (input_poll_hook != NULL) {
+        input_poll_hook();
+    }
+
     GNW_do_bk_process();
 
-    if (vcr_update() != 3) {
+    // CE: Injected input (automated tests) replaces the real mouse while
+    // queued.
+    if (inject_update()) {
+        // Handled.
+    } else if (vcr_update() != 3) {
         mouse_info();
     }
 
     v1 = win_check_all_buttons();
     if (v1 != -1) {
         GNW_add_input_buffer(v1);
+        return;
+    }
+
+    // CE: Local keys wait while injected input is exclusive.
+    if (inject_is_exclusive()) {
         return;
     }
 

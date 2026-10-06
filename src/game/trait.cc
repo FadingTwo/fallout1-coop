@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "game/coop.h"
 #include "game/game.h"
 #include "game/message.h"
 #include "game/object.h"
@@ -53,7 +54,8 @@ static MessageList trait_message_file;
 // List of selected traits.
 //
 // 0x668E60
-static int pc_trait[PC_TRAIT_MAX];
+// Per player, see coop.h.
+#define pc_trait (coop_active_player()->traits)
 
 // 0x4A0490
 int trait_init()

@@ -52,6 +52,21 @@ void mouse_get_hotspot(int* hotx, int* hoty);
 void mouse_set_hotspot(int hotx, int hoty);
 bool mouse_query_exist();
 void mouse_get_raw_state(int* x, int* y, int* buttons);
+
+// CE: The mouse state a second (remote) player works with, swapped in and
+// out by the co-op host. Does not redraw the cursor.
+typedef struct MouseContext {
+    int x;
+    int y;
+    int buttons;
+    int rawX;
+    int rawY;
+    int rawButtons;
+    int lastButtons;
+} MouseContext;
+
+void mouse_get_context(MouseContext* context);
+void mouse_set_context(const MouseContext* context);
 void mouse_disable();
 void mouse_enable();
 bool mouse_is_disabled();

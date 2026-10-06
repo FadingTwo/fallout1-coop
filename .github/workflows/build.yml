@@ -1,0 +1,35 @@
+name: Build
+
+# Builds the Linux and Windows packages the same way releases are made
+# (tools/build-release.sh, cross-compiled with zig). The packages are
+# attached to the run. No server is built in; see docs/coop/SERVER.md.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsdl2-dev
+          pip install ziglang==0.16.0
+
+      - name: Build
+        env:
+          SDL2_INCLUDE_DIRS: /usr/include/SDL2
+          SDL2_LIBRARIES: /usr/lib/x86_64-linux-gnu/libSDL2.so
+        run: tools/build-release.sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.tar.gz
+            dist/*.zip

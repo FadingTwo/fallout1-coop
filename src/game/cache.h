@@ -87,6 +87,10 @@ bool cache_stats(Cache* cache, char* dest, size_t size);
 int cache_create_list(Cache* cache, unsigned int a2, int** tagsPtr, int* tagsLengthPtr);
 int cache_destroy_list(int** tagsPtr);
 
+// CE: true while a cache is reading an entry in; code called back during
+// the read (e.g. the mouse refresh while a map loads) must not use caches.
+bool cache_is_loading();
+
 } // namespace fallout
 
 #endif /* FALLOUT_GAME_CACHE_H_ */

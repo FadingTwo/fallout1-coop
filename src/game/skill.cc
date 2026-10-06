@@ -5,6 +5,7 @@
 
 #include "game/actions.h"
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -29,8 +30,6 @@
 namespace fallout {
 
 #define SKILL_LEVEL_MAX 200
-
-#define SKILLS_MAX_USES_PER_DAY 3
 
 #define HEALABLE_DAMAGE_FLAGS_LENGTH 5
 
@@ -86,10 +85,12 @@ int gStealCount = 0;
 int gStealSize = 0;
 
 // 0x665008
-static int timesSkillUsed[SKILL_COUNT][SKILLS_MAX_USES_PER_DAY];
+// Per player, see coop.h.
+#define timesSkillUsed (coop_active_player()->skillUses)
 
 // 0x664FF0
-static int tag_skill[NUM_TAGGED_SKILLS];
+// Per player, see coop.h.
+#define tag_skill (coop_active_player()->taggedSkills)
 
 // skill.msg
 //
@@ -228,7 +229,10 @@ int skill_level(Object* critter, int skill)
 
     value = skill_description->default_value + bonus + points * skill_description->points_modifier;
 
-    if (critter == obj_dude) {
+    PlayerState* player = coop_player_of(critter);
+    if (player != NULL) {
+        ActivePlayerScope scope(player);
+
         if (skill == tag_skill[0] || skill == tag_skill[1] || skill == tag_skill[2] || skill == tag_skill[3]) {
             value += 20 + points * skill_description->points_modifier;
         }

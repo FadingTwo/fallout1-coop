@@ -7,6 +7,7 @@
 
 #include "game/art.h"
 #include "game/bmpdlog.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/game.h"
@@ -522,7 +523,8 @@ static int oldsline;
 static int upsent_points_back;
 
 // 0x56EC8C
-static int last_level;
+// Per player, see coop.h.
+#define last_level (coop_active_player()->lastLevel)
 
 // 0x56EC90
 static int karma_count;
@@ -620,7 +622,8 @@ static int temp_tag_skill[NUM_TAGGED_SKILLS];
 static char free_perk_back;
 
 // 0x56ED2D
-static unsigned char free_perk;
+// Per player, see coop.h.
+#define free_perk (coop_active_player()->freePerk)
 
 // 0x56ED2E
 static unsigned char first_skill_list;

@@ -2,9 +2,11 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "game/art.h"
+#include "game/editor.h"
 #include "game/game.h"
 #include "game/gsound.h"
 #include "game/options.h"
@@ -15,6 +17,8 @@
 #include "plib/gnw/gnw.h"
 #include "plib/gnw/grbuf.h"
 #include "plib/gnw/input.h"
+#include "plib/gnw/memory.h"
+#include "plib/gnw/mouse.h"
 #include "plib/gnw/svga.h"
 #include "plib/gnw/text.h"
 
@@ -27,13 +31,22 @@ typedef enum MainMenuButton {
     MAIN_MENU_BUTTON_INTRO,
     MAIN_MENU_BUTTON_NEW_GAME,
     MAIN_MENU_BUTTON_LOAD_GAME,
+    // CE: co-op.
+    MAIN_MENU_BUTTON_MULTIPLAYER,
     MAIN_MENU_BUTTON_CREDITS,
     MAIN_MENU_BUTTON_EXIT,
     MAIN_MENU_BUTTON_COUNT,
 } MainMenuButton;
 
+// The panel has room for six buttons.
+#define MAIN_MENU_PANEL_SLOTS 6
+
+// Message ids of the original buttons' labels, -1 for ours.
+static const int main_menu_label_ids[MAIN_MENU_BUTTON_COUNT] = { 9, 10, 11, -1, 12, 13 };
+
 static int main_menu_fatal_error();
 static void main_menu_play_sound(const char* fileName);
+static void main_menu_draw_buttons(const char* const* labels, const int* keys, int count);
 
 // 0x505A84
 static int main_window = -1;
@@ -64,6 +77,7 @@ static int button_values[MAIN_MENU_BUTTON_COUNT] = {
     KEY_LOWERCASE_I,
     KEY_LOWERCASE_N,
     KEY_LOWERCASE_L,
+    KEY_LOWERCASE_M,
     KEY_LOWERCASE_C,
     KEY_LOWERCASE_E,
 };
@@ -73,12 +87,19 @@ static int return_values[MAIN_MENU_BUTTON_COUNT] = {
     MAIN_MENU_INTRO,
     MAIN_MENU_NEW_GAME,
     MAIN_MENU_LOAD_GAME,
+    MAIN_MENU_MULTIPLAYER,
     MAIN_MENU_CREDITS,
     MAIN_MENU_EXIT,
 };
 
 // 0x612DC8
-static int buttons[MAIN_MENU_BUTTON_COUNT];
+static int buttons[MAIN_MENU_PANEL_SLOTS];
+
+// Main menu labels (from misc.msg, plus ours).
+static char main_menu_labels[MAIN_MENU_BUTTON_COUNT][64];
+
+// The window as it is without buttons' labels, to redraw the panel.
+static unsigned char* main_window_clean = NULL;
 
 // 0x612DC0
 static bool main_menu_is_hidden;
@@ -166,44 +187,33 @@ int main_menu_create()
         return main_menu_fatal_error();
     }
 
-    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+    for (int index = 0; index < MAIN_MENU_PANEL_SLOTS; index++) {
         buttons[index] = -1;
     }
 
-    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
-        buttons[index] = win_register_button(main_window,
-            425,
-            index * 42 - index + 45,
-            26,
-            26,
-            -1,
-            -1,
-            1111,
-            button_values[index],
-            button_up_data,
-            button_down_data,
-            NULL,
-            BUTTON_FLAG_TRANSPARENT);
-        if (buttons[index] == -1) {
-            // NOTE: Uninline.
-            return main_menu_fatal_error();
-        }
+    main_window_clean = (unsigned char*)mem_malloc(MAIN_MENU_WINDOW_WIDTH * MAIN_MENU_WINDOW_HEIGHT);
+    if (main_window_clean == NULL) {
+        // NOTE: Uninline.
+        return main_menu_fatal_error();
+    }
+    memcpy(main_window_clean, main_window_buf, MAIN_MENU_WINDOW_WIDTH * MAIN_MENU_WINDOW_HEIGHT);
 
-        win_register_button_mask(buttons[index], button_up_data);
+    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+        main_menu_labels[index][0] = '\0';
+        if (main_menu_label_ids[index] == -1) {
+            strcpy(main_menu_labels[index], "MULTIPLAYER");
+        } else {
+            msg.num = main_menu_label_ids[index];
+            if (message_search(&misc_message_file, &msg)) {
+                snprintf(main_menu_labels[index], sizeof(main_menu_labels[index]), "%s", msg.text);
+            }
+        }
     }
 
-    text_font(104);
-
-    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
-        msg.num = 9 + index;
-        if (message_search(&misc_message_file, &msg)) {
-            len = text_width(msg.text);
-            text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * (42 * index - index + 46) + 520 - (len / 2),
-                msg.text,
-                MAIN_MENU_WINDOW_WIDTH - (520 - (len / 2)) - 1,
-                MAIN_MENU_WINDOW_WIDTH,
-                colorTable[21091]);
-        }
+    main_menu_restore();
+    if (buttons[0] == -1) {
+        // NOTE: Uninline.
+        return main_menu_fatal_error();
     }
 
     text_font(oldFont);
@@ -221,11 +231,16 @@ void main_menu_destroy()
         return;
     }
 
-    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+    for (int index = 0; index < MAIN_MENU_PANEL_SLOTS; index++) {
         // FIXME: Why it tries to free only invalid buttons?
         if (buttons[index] == -1) {
             win_delete_button(buttons[index]);
         }
+    }
+
+    if (main_window_clean != NULL) {
+        mem_free(main_window_clean);
+        main_window_clean = NULL;
     }
 
     if (button_down_data) {
@@ -393,6 +408,178 @@ int main_menu_loop()
     in_main_menu = false;
 
     return rc;
+}
+
+// Puts `count` buttons with `labels` and hot `keys` into the panel.
+static void main_menu_draw_buttons(const char* const* labels, const int* keys, int count)
+{
+    for (int index = 0; index < MAIN_MENU_PANEL_SLOTS; index++) {
+        if (buttons[index] != -1) {
+            win_delete_button(buttons[index]);
+            buttons[index] = -1;
+        }
+    }
+
+    memcpy(main_window_buf, main_window_clean, MAIN_MENU_WINDOW_WIDTH * MAIN_MENU_WINDOW_HEIGHT);
+
+    if (count > MAIN_MENU_PANEL_SLOTS) {
+        count = MAIN_MENU_PANEL_SLOTS;
+    }
+
+    for (int index = 0; index < count; index++) {
+        buttons[index] = win_register_button(main_window,
+            425,
+            index * 42 - index + 45,
+            26,
+            26,
+            -1,
+            -1,
+            1111,
+            keys[index],
+            button_up_data,
+            button_down_data,
+            NULL,
+            BUTTON_FLAG_TRANSPARENT);
+        if (buttons[index] != -1) {
+            win_register_button_mask(buttons[index], button_up_data);
+        }
+    }
+
+    int oldFont = text_curr();
+    text_font(104);
+
+    for (int index = 0; index < count; index++) {
+        int len = text_width(labels[index]);
+        text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * (42 * index - index + 46) + 520 - (len / 2),
+            labels[index],
+            MAIN_MENU_WINDOW_WIDTH - (520 - (len / 2)) - 1,
+            MAIN_MENU_WINDOW_WIDTH,
+            colorTable[21091]);
+    }
+
+    text_font(oldFont);
+
+    win_draw(main_window);
+}
+
+void main_menu_show_buttons(const char* const* labels, const int* keys, int count)
+{
+    main_menu_draw_buttons(labels, keys, count);
+}
+
+void main_menu_restore()
+{
+    const char* labels[MAIN_MENU_BUTTON_COUNT];
+    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+        labels[index] = main_menu_labels[index];
+    }
+
+    main_menu_draw_buttons(labels, button_values, MAIN_MENU_BUTTON_COUNT);
+}
+
+int main_menu_choose(const char* const* labels, const int* keys, int count)
+{
+    main_menu_draw_buttons(labels, keys, count);
+
+    bool oldCursorIsHidden = mouse_hidden();
+    if (oldCursorIsHidden) {
+        mouse_show();
+    }
+
+    int rc = -2;
+    while (rc == -2) {
+        sharedFpsLimiter.mark();
+
+        int keyCode = get_input();
+
+        for (int index = 0; index < count; index++) {
+            if (keyCode == keys[index] || keyCode == toupper(keys[index])) {
+                // NOTE: Uninline.
+                main_menu_play_sound("nmselec1");
+                rc = index;
+                break;
+            }
+        }
+
+        if (keyCode == 1111) {
+            if (!(mouse_get_buttons() & MOUSE_EVENT_LEFT_BUTTON_REPEAT)) {
+                // NOTE: Uninline.
+                main_menu_play_sound("nmselec0");
+            }
+        } else if (keyCode == KEY_ESCAPE || game_user_wants_to_quit != 0) {
+            // NOTE: Uninline.
+            main_menu_play_sound("nmselec1");
+            rc = -1;
+        }
+
+        renderPresent();
+        sharedFpsLimiter.throttle();
+    }
+
+    if (oldCursorIsHidden) {
+        mouse_hide();
+    }
+
+    return rc;
+}
+
+// The bottom slot of the panel, for text.
+#define MAIN_MENU_TEXT_X 422
+#define MAIN_MENU_TEXT_Y 252
+#define MAIN_MENU_TEXT_WIDTH 190
+
+void main_menu_status(const char* text)
+{
+    // Clean slot.
+    for (int row = 0; row < 26; row++) {
+        int offset = MAIN_MENU_WINDOW_WIDTH * (MAIN_MENU_TEXT_Y - 4 + row) + MAIN_MENU_TEXT_X;
+        memcpy(main_window_buf + offset, main_window_clean + offset, MAIN_MENU_TEXT_WIDTH);
+    }
+
+    if (text[0] != '\0') {
+        int oldFont = text_curr();
+        text_font(101);
+        int len = text_width(text);
+        int x = MAIN_MENU_TEXT_X + (len < MAIN_MENU_TEXT_WIDTH ? (MAIN_MENU_TEXT_WIDTH - len) / 2 : 0);
+        text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * MAIN_MENU_TEXT_Y + x, text, MAIN_MENU_TEXT_WIDTH, MAIN_MENU_WINDOW_WIDTH, colorTable[992]);
+        text_font(oldFont);
+    }
+
+    win_draw(main_window);
+    renderPresent();
+}
+
+bool main_menu_input(const char* label, const char* hint, char* text, int maxLength)
+{
+    // Only the label's buttons-free panel: no buttons while typing.
+    main_menu_draw_buttons(NULL, NULL, 0);
+
+    int oldFont = text_curr();
+    text_font(104);
+    int len = text_width(label);
+    text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * 46 + 520 - (len / 2), label, MAIN_MENU_WINDOW_WIDTH - (520 - (len / 2)) - 1, MAIN_MENU_WINDOW_WIDTH, colorTable[21091]);
+
+    text_font(101);
+    len = text_width(hint);
+    text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * 128 + 520 - (len / 2), hint, MAIN_MENU_WINDOW_WIDTH - (520 - (len / 2)) - 1, MAIN_MENU_WINDOW_WIDTH, colorTable[992]);
+
+    // Black field across the second slot.
+    int fieldX = 432;
+    int fieldY = 90;
+    buf_fill(main_window_buf + MAIN_MENU_WINDOW_WIDTH * (fieldY - 3) + fieldX - 4, 172, text_height() + 6, MAIN_MENU_WINDOW_WIDTH, colorTable[0]);
+    win_draw(main_window);
+
+    // Large enough cancel code that no key produces it.
+    bool ok = get_input_str(main_window, 0x7FFF0000, text, maxLength, fieldX, fieldY, colorTable[992], colorTable[0], 0) == 0;
+    text_font(oldFont);
+
+    // Trailing blank the editor's input adds.
+    size_t length = strlen(text);
+    while (length > 0 && text[length - 1] == ' ') {
+        text[--length] = '\0';
+    }
+
+    return ok;
 }
 
 // 0x4735B8

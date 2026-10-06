@@ -12,9 +12,18 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "game/amutex.h"
 #include "game/art.h"
+#include "game/autotest.h"
+#include "game/coop.h"
+#include "game/coop_crash.h"
+#include "game/coop_host.h"
+#include "game/coop_menu.h"
+#include "game/coop_setup.h"
+#include "game/coop_update.h"
+#include "game/coop_net.h"
 #include "game/credits.h"
 #include "game/cycle.h"
 #include "game/endgame.h"
@@ -92,9 +101,43 @@ int gnw_main(int argc, char** argv)
         return 1;
     }
 
+    // CE: Co-op self-update: remember how we were started, and remove what
+    // an update replaced.
+    coop_update_init(argc, argv);
+    coop_update_cleanup();
+
+    // CE: First run - find the game data, or quit if the player gives up.
+    if (!coop_setup_ensure_game_data(argc, argv)) {
+        autorun_mutex_destroy();
+        return 0;
+    }
+
     if (!main_init_system(argc, argv)) {
         return 1;
     }
+
+    // CE: Co-op crash reports (not in automated tests: they have their own
+    // checks, e.g. the address sanitizer's). FALLOUT_COOP_CRASH_TEST=crash
+    // crashes here on purpose.
+    const char* crashTest = getenv("FALLOUT_COOP_CRASH_TEST");
+    coop_crash_install("crash-report.txt", !autotest_requested() || crashTest != NULL);
+    if (crashTest != NULL && strcmp(crashTest, "crash") == 0) {
+        debug_printf("\nCOOP: crashing on purpose (FALLOUT_COOP_CRASH_TEST)\n");
+        coop_crash_now();
+    }
+
+    if (autotest_requested()) {
+        // Skips the main loop and cleanup on purpose: nothing (including
+        // fallout.cfg) is written besides the test's own output.
+        exit(autotest_run(main_load_new));
+    }
+
+    // Co-op: player 2's machine only shows what the host sends.
+    if (coop_net_mode() == COOP_NET_CLIENT) {
+        exit(coop_net_client_run());
+    }
+
+    coop_host_init();
 
     gmovie_play(MOVIE_IPLOGO, GAME_MOVIE_FADE_IN);
     gmovie_play(MOVIE_INTRO, 0);
@@ -112,6 +155,11 @@ int gnw_main(int argc, char** argv)
 
             mouse_show();
             int mainMenuRc = main_menu_loop();
+            if (mainMenuRc == MAIN_MENU_MULTIPLAYER) {
+                // CE: co-op setup; continues with a new or loaded game, or
+                // comes back here.
+                mainMenuRc = coop_menu_run();
+            }
             mouse_hide();
 
             switch (mainMenuRc) {
@@ -209,6 +257,9 @@ int gnw_main(int argc, char** argv)
                 main_selfrun_record();
                 break;
             }
+
+            // CE: a co-op game started from the menu has ended.
+            coop_menu_end_session();
         }
     }
 
@@ -307,6 +358,14 @@ static void main_unload_new()
     map_exit();
 }
 
+bool main_game_loop_for_test()
+{
+    main_game_loop();
+    bool death = main_show_death_scene;
+    main_show_death_scene = false;
+    return death;
+}
+
 // 0x472A54
 static void main_game_loop()
 {
@@ -322,10 +381,14 @@ static void main_game_loop()
     while (game_user_wants_to_quit == 0) {
         sharedFpsLimiter.mark();
 
+        coop_host_begin_main_input();
         int keyCode = get_input();
+        coop_host_end_main_input();
         game_handle_input(keyCode, false);
 
         scripts_check_state();
+
+        coop_process_requests();
 
         map_check_state();
 
@@ -333,7 +396,18 @@ static void main_game_loop()
             main_game_paused = 0;
         }
 
-        if ((obj_dude->data.critter.combat.results & (DAM_DEAD | DAM_KNOCKED_OUT)) != 0) {
+        // Co-op: the game is lost when any player dies.
+        if (coop_any_player_has(DAM_DEAD | DAM_KNOCKED_OUT)) {
+            main_show_death_scene = 1;
+            game_user_wants_to_quit = 2;
+        }
+
+        // Co-op host: player 2's part of the frame (input and own view).
+        coop_host_frame();
+
+        // A death there (player 2 is obj_dude then) ends the game too, and
+        // must get the death scene like any other.
+        if (coop_any_player_has(DAM_DEAD | DAM_KNOCKED_OUT)) {
             main_show_death_scene = 1;
             game_user_wants_to_quit = 2;
         }

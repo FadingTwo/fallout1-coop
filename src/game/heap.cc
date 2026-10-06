@@ -2,6 +2,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#if defined(__GLIBC__)
+#include <execinfo.h>
+#include <unistd.h>
+#endif
 #include <string.h>
 
 #include "plib/gnw/debug.h"
@@ -214,8 +219,53 @@ bool heap_exit(Heap* heap)
     return true;
 }
 
+// CE (testing): with COOP_HEAP_CHECK set, every block's guards are checked
+// after each heap operation, and the first damaged one stops the game
+// (abort), so the code that wrote past its block is close on the stack.
+static int heap_check_enabled = -1;
+
+// Stops the game with where it was (testing only).
+static void heap_check_fail()
+{
+#if defined(__GLIBC__)
+    void* frames[32];
+    int count = backtrace(frames, 32);
+    backtrace_symbols_fd(frames, count, STDERR_FILENO);
+#endif
+    abort();
+}
+
+static void heap_check(Heap* heap, const char* after)
+{
+    if (heap_check_enabled == -1) {
+        heap_check_enabled = getenv("COOP_HEAP_CHECK") != NULL ? 1 : 0;
+    }
+    if (heap_check_enabled == 0 || heap == NULL || heap->data == NULL) {
+        return;
+    }
+
+    unsigned char* ptr = heap->data;
+    unsigned char* end = heap->data + heap->size;
+    int blocks = heap->freeBlocks + heap->moveableBlocks + heap->lockedBlocks + heap->systemBlocks;
+    for (int index = 0; index < blocks && ptr < end; index++) {
+        HeapBlockHeader* header = (HeapBlockHeader*)ptr;
+        if (header->guard != HEAP_BLOCK_HEADER_GUARD || header->size < 0 || ptr + header->size + HEAP_BLOCK_OVERHEAD_SIZE > end) {
+            debug_printf("\nHEAP CHECK: block %d of %d damaged (header) after %s\n", index, blocks, after);
+            fprintf(stderr, "HEAP CHECK: block %d damaged (header) after %s\n", index, after);
+            heap_check_fail();
+        }
+        HeapBlockFooter* footer = (HeapBlockFooter*)(ptr + HEAP_BLOCK_HEADER_SIZE + header->size);
+        if (footer->guard != HEAP_BLOCK_FOOTER_GUARD) {
+            debug_printf("\nHEAP CHECK: block %d of %d (size %d, state %u) damaged (footer) after %s\n", index, blocks, header->size, header->state, after);
+            fprintf(stderr, "HEAP CHECK: block %d (size %d, state %u) damaged (footer) after %s\n", index, header->size, header->state, after);
+            heap_check_fail();
+        }
+        ptr += header->size + HEAP_BLOCK_OVERHEAD_SIZE;
+    }
+}
+
 // 0x44A0B0
-bool heap_allocate(Heap* heap, int* handleIndexPtr, int size, int a4)
+static bool heap_allocate_unchecked(Heap* heap, int* handleIndexPtr, int size, int a4)
 {
     HeapBlockHeader* blockHeader;
     int state;
@@ -334,7 +384,7 @@ err:
 }
 
 // 0x44A294
-bool heap_deallocate(Heap* heap, int* handleIndexPtr)
+static bool heap_deallocate_unchecked(Heap* heap, int* handleIndexPtr)
 {
     if (heap == NULL || handleIndexPtr == NULL) {
         debug_printf("Heap Error: Could not deallocate block.\n");
@@ -403,7 +453,7 @@ bool heap_deallocate(Heap* heap, int* handleIndexPtr)
 }
 
 // 0x44A3C0
-bool heap_lock(Heap* heap, int handleIndex, unsigned char** bufferPtr)
+static bool heap_lock_unchecked(Heap* heap, int handleIndex, unsigned char** bufferPtr)
 {
     if (heap == NULL) {
         debug_printf("Heap Error: Could not lock block");
@@ -464,7 +514,7 @@ bool heap_lock(Heap* heap, int handleIndex, unsigned char** bufferPtr)
 }
 
 // 0x44A4C4
-bool heap_unlock(Heap* heap, int handleIndex)
+static bool heap_unlock_unchecked(Heap* heap, int handleIndex)
 {
     if (heap == NULL) {
         debug_printf("Heap Error: Could not unlock block.\n");
@@ -489,6 +539,11 @@ bool heap_unlock(Heap* heap, int handleIndex)
 
     if ((handle->state & HEAP_BLOCK_STATE_LOCKED) == 0) {
         debug_printf("Heap Error: Attempt to unlock a previously unlocked block.\n");
+        if (heap_check_enabled == 1) {
+            // Testing: the caller unlocks what it never locked (or twice).
+            fprintf(stderr, "HEAP CHECK: unlock of an unlocked block\n");
+            heap_check_fail();
+        }
         debug_printf("Heap Error: Could not unlock block.\n");
         return false;
     }
@@ -1324,6 +1379,38 @@ static bool heap_build_fake_move_list(size_t count)
     }
 
     return true;
+}
+
+bool heap_allocate(Heap* heap, int* handleIndexPtr, int size, int a4)
+{
+    heap_check(heap, "before heap_allocate");
+    bool result = heap_allocate_unchecked(heap, handleIndexPtr, size, a4);
+    heap_check(heap, "heap_allocate");
+    return result;
+}
+
+bool heap_deallocate(Heap* heap, int* handleIndexPtr)
+{
+    heap_check(heap, "before heap_deallocate");
+    bool result = heap_deallocate_unchecked(heap, handleIndexPtr);
+    heap_check(heap, "heap_deallocate");
+    return result;
+}
+
+bool heap_lock(Heap* heap, int handleIndex, unsigned char** bufferPtr)
+{
+    heap_check(heap, "before heap_lock");
+    bool result = heap_lock_unchecked(heap, handleIndex, bufferPtr);
+    heap_check(heap, "heap_lock");
+    return result;
+}
+
+bool heap_unlock(Heap* heap, int handleIndex)
+{
+    heap_check(heap, "before heap_unlock");
+    bool result = heap_unlock_unchecked(heap, handleIndex);
+    heap_check(heap, "heap_unlock");
+    return result;
 }
 
 } // namespace fallout

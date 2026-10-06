@@ -28,6 +28,16 @@ typedef enum InterfaceItemAction {
     INTERFACE_ITEM_ACTION_COUNT,
 } InterfaceItemAction;
 
+typedef struct InterfaceItemState {
+    Object* item;
+    unsigned char isDisabled;
+    unsigned char isWeapon;
+    int primaryHitMode;
+    int secondaryHitMode;
+    int action;
+    int itemFid;
+} InterfaceItemState;
+
 extern int interfaceWindow;
 extern int bar_window;
 

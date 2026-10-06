@@ -8,6 +8,8 @@
 #include "game/anim.h"
 #include "game/art.h"
 #include "game/combatai.h"
+#include "game/coop.h"
+#include "game/coop_host.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/elevator.h"
@@ -1779,7 +1781,8 @@ static void combat_begin_extra(Object* a1)
 
     for (index = 0; index < list_total; index++) {
         outline_type = OUTLINE_TYPE_HOSTILE;
-        if (perk_level(PERK_FRIENDLY_FOE)) {
+        // Co-op: applies when any player has the perk.
+        if (coop_any_player_has_perk(PERK_FRIENDLY_FOE)) {
             if (combat_list[index]->data.critter.combat.team == obj_dude->data.critter.combat.team) {
                 outline_type = OUTLINE_TYPE_FRIENDLY;
             }
@@ -2144,8 +2147,16 @@ static int combat_input()
 {
     int input;
 
+    // Co-op: turn time limit, and scripted turns in automated tests.
+    unsigned int turnStart = get_time();
+    bool scriptedTurn = coop_run_turn_hook(obj_dude);
+
     while ((combat_state & COMBAT_STATE_0x02) != 0) {
         sharedFpsLimiter.mark();
+
+        if (scriptedTurn || coop_turn_time_expired(turnStart)) {
+            break;
+        }
 
         if ((combat_state & COMBAT_STATE_0x08) != 0) {
             break;
@@ -2168,6 +2179,14 @@ static int combat_input()
         }
 
         input = get_input();
+
+        // Co-op chat takes the keys while typing (a space must not end the
+        // turn, nor Enter the fight).
+        if (input > 0 && coop_host_chat_key(input)) {
+            renderPresent();
+            sharedFpsLimiter.throttle();
+            continue;
+        }
 
         if (input == KEY_SPACE) {
             break;
@@ -2215,6 +2234,10 @@ static int combat_turn(Object* a1, bool a2)
     int action_points;
     bool script_override = false;
     Script* script;
+
+    // Co-op: a player's turn runs as that player, so the human-controlled
+    // path below (a1 == obj_dude) applies to every player character.
+    ActivePlayerScope scope(coop_player_of(a1));
 
     combat_turn_obj = a1;
 
@@ -2321,7 +2344,8 @@ static int combat_turn(Object* a1, bool a2)
 
     a1->data.critter.combat.damageLastTurn = 0;
 
-    if ((obj_dude->data.critter.combat.results & DAM_DEAD) != 0) {
+    // Co-op: the game is lost when any player dies.
+    if (coop_any_player_has(DAM_DEAD)) {
         return -1;
     }
 
@@ -2822,7 +2846,8 @@ static int compute_attack(Attack* attack)
     }
 
     if (roll == ROLL_FAILURE) {
-        if (trait_level(TRAIT_JINXED)) {
+        // Co-op: applies when any player is Jinxed.
+        if (coop_any_player_has_trait(TRAIT_JINXED)) {
             if (roll_random(0, 1) == 1) {
                 roll = ROLL_CRITICAL_FAILURE;
             }
@@ -3625,7 +3650,8 @@ static void damage_object(Object* obj, int damage, bool animated, bool a4)
         scr_set_objs(obj->sid, obj->data.critter.combat.whoHitMe, NULL);
         exec_script_proc(obj->sid, SCRIPT_PROC_DESTROY);
 
-        if (obj != obj_dude) {
+        // Co-op: no player character counts as a kill.
+        if (coop_player_of(obj) == NULL) {
             Object* whoHitMe = obj->data.critter.combat.whoHitMe;
             if (whoHitMe == obj_dude || (whoHitMe != NULL && whoHitMe->data.critter.combat.team == obj_dude->data.critter.combat.team)) {
                 bool scriptOverrides = false;
@@ -3636,6 +3662,11 @@ static void damage_object(Object* obj, int damage, bool animated, bool a4)
 
                 if (!scriptOverrides) {
                     combat_exps += critter_kill_exps(obj);
+
+                    // The kill counts for the player who made it; kills by
+                    // companions count for player 1.
+                    PlayerState* killer = coop_player_of(whoHitMe);
+                    ActivePlayerScope scope(killer != NULL ? killer : coop_player(0));
                     critter_kill_count_inc(critter_kill_count_type(obj));
                 }
             }
@@ -4600,7 +4631,8 @@ void combat_outline_on()
         for (index = 0; index < critters_length; index++) {
             if (critters[index] != obj_dude && (critters[index]->data.critter.combat.results & DAM_DEAD) == 0) {
                 outline_type = OUTLINE_TYPE_HOSTILE;
-                if (perk_level(PERK_FRIENDLY_FOE)) {
+                // Co-op: applies when any player has the perk.
+                if (coop_any_player_has_perk(PERK_FRIENDLY_FOE)) {
                     if (critters[index]->data.critter.combat.team == obj_dude->data.critter.combat.team) {
                         outline_type = OUTLINE_TYPE_FRIENDLY;
                     }

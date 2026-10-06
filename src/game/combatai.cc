@@ -8,6 +8,7 @@
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -533,7 +534,9 @@ static int ai_find_attackers(Object* critter, Object** a2, Object** a3, Object**
         *a3 = NULL;
     }
 
-    if (*a4 != NULL) {
+    // Was `*a4 != NULL`, which reads ai_danger_source's uninitialized
+    // targets[3]; clang (the Windows build) turned that into a crash.
+    if (a4 != NULL) {
         *a4 = NULL;
     }
 
@@ -1265,6 +1268,12 @@ bool combatai_want_to_join(Object* a1)
         return false;
     }
 
+    // Co-op: a player always takes part. (Out of sight like a companion,
+    // they would sit out the whole fight, unable to move.)
+    if (coop_player_of(a1) != NULL) {
+        return true;
+    }
+
     if (a1->data.critter.combat.damageLastTurn > 0) {
         return true;
     }
@@ -1356,7 +1365,8 @@ int combatai_switch_team(Object* critter, int team)
         obj_remove_outline(critter, NULL);
 
         outline_type = OUTLINE_TYPE_HOSTILE;
-        if (perk_level(PERK_FRIENDLY_FOE)) {
+        // Co-op: applies when any player has the perk.
+        if (coop_any_player_has_perk(PERK_FRIENDLY_FOE)) {
             if (critter->data.critter.combat.team == obj_dude->data.critter.combat.team) {
                 outline_type = OUTLINE_TYPE_FRIENDLY;
             }

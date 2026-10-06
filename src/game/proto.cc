@@ -6,6 +6,7 @@
 #include "game/art.h"
 #include "game/combat.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/editor.h"
 #include "game/game.h"
@@ -71,6 +72,9 @@ static const size_t proto_sizes[11] = {
 
 // 0x50752C
 static int protos_been_initialized = 0;
+
+// Co-op player 2's counterpart of `pc_proto`, see coop.h.
+static CritterProto coop_pc_proto;
 
 // 0x507530
 static CritterProto pc_proto = {
@@ -350,8 +354,9 @@ static char* proto_get_msg_info(int pid, int message)
 // 0x48D108
 char* proto_name(int pid)
 {
-    if (pid == 0x1000000) {
-        return critter_name(obj_dude);
+    PlayerState* player = coop_player_by_pid(pid);
+    if (player != NULL) {
+        return critter_name(pid == obj_dude->pid ? obj_dude : player->obj);
     }
 
     return proto_get_msg_info(pid, PROTOTYPE_MESSAGE_NAME);
@@ -718,16 +723,13 @@ int proto_update_init(Object* obj)
 int proto_dude_update_gender()
 {
     Proto* proto;
-    if (proto_ptr(0x1000000, &proto) == -1) {
+    if (proto_ptr(obj_dude->pid, &proto) == -1) {
         return -1;
     }
 
-    int art_num;
-    if (stat_level(obj_dude, STAT_GENDER) == GENDER_MALE) {
-        art_num = art_vault_person_nums[GENDER_MALE];
-    } else {
-        art_num = art_vault_person_nums[GENDER_FEMALE];
-    }
+    // Co-op: each player has their own look (the vault jumpsuit unless
+    // player 2 chose otherwise).
+    int art_num = coop_look_art(stat_level(obj_dude, STAT_GENDER) == GENDER_MALE ? GENDER_MALE : GENDER_FEMALE);
 
     art_vault_guy_num = art_num;
 
@@ -755,20 +757,18 @@ int proto_dude_init(const char* path)
     // 0x51C53C
     static int retval = 0;
 
-    pc_proto.fid = art_id(OBJ_TYPE_CRITTER, art_vault_guy_num, 0, 0, 0);
+    Proto* proto;
+    if (proto_ptr(obj_dude->pid, &proto) == -1) {
+        return -1;
+    }
+
+    proto->fid = art_id(OBJ_TYPE_CRITTER, art_vault_guy_num, 0, 0, 0);
 
     if (init_true) {
         obj_inven_free(&(obj_dude->data.inventory));
     }
 
     init_true = 1;
-
-    Proto* proto;
-    if (proto_ptr(0x1000000, &proto) == -1) {
-        return -1;
-    }
-
-    proto_ptr(obj_dude->pid, &proto);
 
     proto_update_init(obj_dude);
     obj_dude->data.critter.combat.aiPacket = 0;
@@ -1163,6 +1163,15 @@ void proto_reset()
 
     protos_been_initialized = 1;
     proto_dude_init("premade\\player.gcd");
+}
+
+// Resets co-op player 2's proto, see coop.h.
+void proto_player2_reset()
+{
+    // TODO: Get rid of cast.
+    proto_critter_init((Proto*)&coop_pc_proto, COOP_PLAYER2_PID);
+    coop_pc_proto.pid = COOP_PLAYER2_PID;
+    coop_pc_proto.fid = art_id(OBJ_TYPE_CRITTER, 1, 0, 0, 0);
 }
 
 // 0x48EC98
@@ -1742,6 +1751,11 @@ int proto_ptr(int pid, Proto** protoPtr)
 
     if (pid == 0x1000000) {
         *protoPtr = (Proto*)&pc_proto;
+        return 0;
+    }
+
+    if (pid == COOP_PLAYER2_PID) {
+        *protoPtr = (Proto*)&coop_pc_proto;
         return 0;
     }
 

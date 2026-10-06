@@ -106,7 +106,14 @@ typedef enum WeaponAnimation {
     WEAPON_ANIMATION_COUNT,
 } WeaponAnimation;
 
-extern int art_vault_guy_num;
+// Current native look base fid; per co-op player.
+int* art_vault_guy_num_ptr();
+
+// Index of the critter art named `name` (e.g. "hmjmps") in critters.lst,
+// or -1.
+int art_critter_index(const char* name);
+#define art_vault_guy_num (*art_vault_guy_num_ptr())
+
 extern int art_vault_person_nums[GENDER_COUNT];
 extern int art_mapper_blank_tile;
 

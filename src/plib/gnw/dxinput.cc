@@ -1,5 +1,7 @@
 #include "plib/gnw/dxinput.h"
 
+#include <string.h>
+
 namespace fallout {
 
 static bool dxinput_mouse_init();
@@ -103,7 +105,14 @@ bool dxinput_read_keyboard_buffer(KeyboardData* keyboardData)
 // 0x4E070C
 bool dxinput_mouse_init()
 {
-    return SDL_SetRelativeMouseMode(SDL_TRUE) == 0;
+    if (SDL_SetRelativeMouseMode(SDL_TRUE) == 0) {
+        return true;
+    }
+
+    // CE: Headless video drivers (used by the automated test harness) have
+    // no relative mouse mode; the game works without it there.
+    const char* driver = SDL_GetCurrentVideoDriver();
+    return driver != NULL && (strcmp(driver, "offscreen") == 0 || strcmp(driver, "dummy") == 0);
 }
 
 // 0x4E078C

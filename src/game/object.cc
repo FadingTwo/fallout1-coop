@@ -8,6 +8,7 @@
 #include "game/anim.h"
 #include "game/art.h"
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/game.h"
 #include "game/gconfig.h"
@@ -218,6 +219,8 @@ static int light_offsets[2][6][36];
 
 // 0x638150
 static Object* outlinedObjects[100];
+
+static int obj_outline_type(Object* obj);
 
 // 0x6382E0
 static Rect buf_rect;
@@ -827,10 +830,8 @@ void obj_render_pre_roof(Rect* rect, int elevation)
                     if ((objectListNode->obj->flags & OBJECT_HIDDEN) == 0) {
                         obj_render_object(objectListNode->obj, &updatedRect, lightIntensity);
 
-                        if ((objectListNode->obj->outline & OUTLINE_TYPE_MASK) != 0) {
-                            if ((objectListNode->obj->outline & OUTLINE_DISABLED) == 0 && outlineCount < 100) {
-                                outlinedObjects[outlineCount++] = objectListNode->obj;
-                            }
+                        if (obj_outline_type(objectListNode->obj) != 0 && outlineCount < 100) {
+                            outlinedObjects[outlineCount++] = objectListNode->obj;
                         }
                     }
                 }
@@ -862,10 +863,8 @@ void obj_render_pre_roof(Rect* rect, int elevation)
                 if ((objectListNode->obj->flags & OBJECT_HIDDEN) == 0) {
                     obj_render_object(object, &updatedRect, lightIntensity);
 
-                    if ((objectListNode->obj->outline & OUTLINE_TYPE_MASK) != 0) {
-                        if ((objectListNode->obj->outline & OUTLINE_DISABLED) == 0 && outlineCount < 100) {
-                            outlinedObjects[outlineCount++] = objectListNode->obj;
-                        }
+                    if (obj_outline_type(objectListNode->obj) != 0 && outlineCount < 100) {
+                        outlinedObjects[outlineCount++] = objectListNode->obj;
                     }
                 }
             }
@@ -873,6 +872,17 @@ void obj_render_pre_roof(Rect* rect, int elevation)
             objectListNode = objectListNode->next;
         }
     }
+}
+
+// The outline drawn around `obj`: its own when shown, otherwise the co-op
+// player outline (if any). 0 means none.
+static int obj_outline_type(Object* obj)
+{
+    if ((obj->outline & OUTLINE_TYPE_MASK) != 0 && (obj->outline & OUTLINE_DISABLED) == 0) {
+        return obj->outline & OUTLINE_TYPE_MASK;
+    }
+
+    return coop_outline_type(obj);
 }
 
 // 0x47B5EC
@@ -1397,7 +1407,8 @@ int obj_move_to_tile(Object* obj, int tile, int elevation, Rect* rect)
         rect_min_bound(rect, &v23, rect);
     }
 
-    if (obj == obj_dude) {
+    // Co-op: only player 1 uses exit grids.
+    if (obj == obj_dude && coop_primary_is_active()) {
         ObjectListNode* objectListNode = objectTable[tile];
         while (objectListNode != NULL) {
             Object* obj = objectListNode->obj;
@@ -2210,7 +2221,7 @@ void obj_bound(Object* obj, Rect* rect)
     }
 
     bool isOutlined = false;
-    if ((obj->outline & OUTLINE_TYPE_MASK) != 0) {
+    if ((obj->outline & OUTLINE_TYPE_MASK) != 0 || coop_outline_type(obj) != 0) {
         isOutlined = true;
     }
 
@@ -4451,7 +4462,7 @@ static void obj_render_outline(Object* object, Rect* rect)
         unsigned char* v47 = NULL;
         unsigned char* v48 = NULL;
         int v53 = object->outline & OUTLINE_PALETTED;
-        int outlineType = object->outline & OUTLINE_TYPE_MASK;
+        int outlineType = obj_outline_type(object);
         int v43;
         int v44;
 
@@ -4483,6 +4494,18 @@ static void obj_render_outline(Object* object, Rect* rect)
             v44 = frameHeight / 4;
             color = 229;
             v53 = 0;
+            break;
+        case OUTLINE_TYPE_COOP_PLAYER1:
+            // Green unless the viewer picked another color.
+            color = coop_viewer_outline_color(0);
+            v53 = 0;
+            v44 = 0;
+            break;
+        case OUTLINE_TYPE_COOP_PLAYER2:
+            // Yellow unless the viewer picked another color.
+            color = coop_viewer_outline_color(1);
+            v53 = 0;
+            v44 = 0;
             break;
         case OUTLINE_TYPE_ITEM:
             v44 = 0;

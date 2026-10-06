@@ -225,8 +225,16 @@ void handleWindowSizeChanged()
     createRenderer(screenGetWidth(), screenGetHeight());
 }
 
+// CE: Called with each presented frame, e.g. to stream the screen to a co-op
+// client. NULL when unused.
+void (*svga_present_hook)() = NULL;
+
 void renderPresent()
 {
+    if (svga_present_hook != NULL) {
+        svga_present_hook();
+    }
+
     SDL_UpdateTexture(gSdlTexture, NULL, gSdlTextureSurface->pixels, gSdlTextureSurface->pitch);
     SDL_RenderClear(gSdlRenderer);
     SDL_RenderCopy(gSdlRenderer, gSdlTexture, NULL, NULL);

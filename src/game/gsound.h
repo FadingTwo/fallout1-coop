@@ -63,6 +63,23 @@ SoundEndCallback* gsound_background_callback_get();
 SoundEndCallback* gsound_background_callback_get_set(SoundEndCallback* callback);
 int gsound_background_length_get();
 int gsound_background_play(const char* fileName, int a2, int a3, int a4);
+
+// CE: Reports sounds as they start, e.g. to replay them on a co-op client.
+// NULL when unused.
+typedef enum GsoundEvent {
+    // name, volume.
+    GSOUND_EVENT_SFX,
+    // name and the gsound_background_play() arguments.
+    GSOUND_EVENT_MUSIC,
+    GSOUND_EVENT_MUSIC_STOP,
+    // name (under sound\\speech\\) and the gsound_speech_play() arguments
+    // (0 for conversations' lip-synced speech).
+    GSOUND_EVENT_SPEECH,
+    GSOUND_EVENT_SPEECH_STOP,
+} GsoundEvent;
+
+typedef void(GsoundEventHook)(int event, const char* name, int a, int b, int c);
+extern GsoundEventHook* gsound_event_hook;
 int gsound_background_play_level_music(const char* a1, int a2);
 int gsound_background_play_preloaded();
 void gsound_background_stop();

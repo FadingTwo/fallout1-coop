@@ -546,7 +546,7 @@ int obj_remove_from_inven(Object* critter, Object* item)
             int v5 = 1;
 
             Proto* proto;
-            if (proto_ptr(0x1000000, &proto) != -1) {
+            if (proto_ptr(critter->pid, &proto) != -1) {
                 v5 = proto->fid;
             }
 

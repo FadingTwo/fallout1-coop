@@ -1,3 +1,35 @@
+# Fallout Co-op
+
+Play Fallout with a friend. This is a fan-made two-player co-op mod for
+Fallout 1, built on [Fallout Community Edition](https://github.com/alexbatalov/fallout1-ce).
+Player 1 hosts the game; player 2 joins over a LAN, the internet, or on
+the same PC, with their own character.
+
+You need your own copy of Fallout (GOG or Steam). No game files are
+included. Co-op is off by default: without it the game plays exactly like
+Fallout CE.
+
+- [COOP.md](COOP.md): how to play, the rules, and the settings
+- [docs/coop/ARCHITECTURE.md](docs/coop/ARCHITECTURE.md): how it works
+- [docs/coop/SERVER.md](docs/coop/SERVER.md): running your own server
+  (server list, relay for online play, updates, bug reports); the game
+  works without one on a LAN or with a direct address
+- [docs/coop/TESTING.md](docs/coop/TESTING.md): the automatic tests
+- [docs/coop/HOW-IT-WAS-MADE.md](docs/coop/HOW-IT-WAS-MADE.md): how it
+  was built, and why it works the way it does
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+
+Build with `cmake -B build && cmake --build build` (needs SDL2), or build
+the Linux and Windows packages with `tools/build-release.sh`.
+
+Unofficial. Not affiliated with or endorsed by Bethesda Softworks,
+ZeniMax, Microsoft or Interplay. Licensed like Fallout CE under the
+Sustainable Use License (free, non-commercial).
+
+The rest of this file is Fallout CE's own README.
+
+---
+
 # Fallout Community Edition
 
 Fallout Community Edition is a fully working re-implementation of Fallout, with the same original gameplay, engine bugfixes, and some quality of life improvements, that works (mostly) hassle-free on multiple platforms.

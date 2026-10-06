@@ -9,6 +9,8 @@
 #include "game/bmpdlog.h"
 #include "game/combat.h"
 #include "game/combatai.h"
+#include "game/coop.h"
+#include "game/coop_host.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/display.h"
@@ -133,6 +135,17 @@ int game_init(const char* windowTitle, bool isMapper, int font, int flags, int a
     }
 
     gconfig_init(isMapper, argc, argv);
+
+    // Debug output target comes from the DEBUGACTIVE environment variable
+    // (mono, log, screen, gnw) when [debug] mode=environment, as in the
+    // original game. Nothing changes when DEBUGACTIVE is unset.
+    char* debugMode;
+    if (config_get_string(&game_config, GAME_CONFIG_DEBUG_KEY, GAME_CONFIG_MODE_KEY, &debugMode)
+        && compat_stricmp(debugMode, "environment") == 0) {
+        debug_register_env();
+    }
+
+    coop_init();
 
     game_in_mapper = isMapper;
 
@@ -350,6 +363,7 @@ int game_init(const char* windowTitle, bool isMapper, int font, int flags, int a
 // 0x43B5A8
 void game_reset()
 {
+    coop_reset();
     tile_disable_refresh();
     palette_reset();
     roll_reset();
@@ -483,6 +497,11 @@ int game_handle_input(int eventCode, bool isInCombatMode)
     }
 
     if (gmouse_is_scrolling()) {
+        return 0;
+    }
+
+    // Co-op chat over the network takes the keys while typing.
+    if (coop_host_chat_key(eventCode)) {
         return 0;
     }
 
@@ -859,6 +878,14 @@ int game_handle_input(int eventCode, bool isInCombatMode)
                 display_print(msg);
             }
         }
+        break;
+    case KEY_F8:
+        if (coop_selftest_enabled()) {
+            coop_selftest();
+        }
+        break;
+    case KEY_F9:
+        coop_handle_switch_key();
         break;
     case KEY_CTRL_V:
         if (1) {

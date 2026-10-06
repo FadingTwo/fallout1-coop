@@ -172,6 +172,7 @@ void script_make_path(char* path);
 int exec_script_proc(int sid, int proc);
 int scr_find_str_run_info(int a1, int* a2, int sid);
 int scr_list_str(int index, char* name, size_t size);
+bool scr_find_dialog_head(Object* obj, int* headPtr, int* backgroundPtr);
 int scr_set_dude_script();
 int scr_clear_dude_script();
 int scr_init();

@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
+#include <unordered_map>
+
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/gconfig.h"
@@ -27,6 +30,27 @@
 #include "pointer_registry.h"
 
 namespace fallout {
+
+GsoundEventHook* gsound_event_hook = NULL;
+
+// Names (and volumes) of loaded effects, while gsound_event_hook is set.
+typedef struct GsoundLoadedEffect {
+    std::string name;
+    int volume;
+} GsoundLoadedEffect;
+
+static std::unordered_map<Sound*, GsoundLoadedEffect> gsound_loaded_effects;
+
+static void gsound_report_effect(Sound* sound)
+{
+    if (gsound_event_hook != NULL) {
+        auto it = gsound_loaded_effects.find(sound);
+        if (it != gsound_loaded_effects.end()) {
+            gsound_event_hook(GSOUND_EVENT_SFX, it->second.name.c_str(), it->second.volume, 0, 0);
+        }
+    }
+}
+
 
 static void gsound_bkg_proc();
 static int gsound_open(const char* fname, int flags);
@@ -633,10 +657,17 @@ int gsound_background_play(const char* fileName, int a2, int a3, int a4)
 {
     int rc;
 
+    if (gsound_event_hook != NULL) {
+        gsound_event_hook(GSOUND_EVENT_MUSIC, fileName, a2, a3, a4);
+    }
+
     background_storage_requested = a3;
     background_loop_requested = a4;
 
-    strcpy(background_fname_requested, fileName);
+    // (gsound_background_restart_last() passes this very buffer.)
+    if (fileName != background_fname_requested) {
+        strcpy(background_fname_requested, fileName);
+    }
 
     if (!gsound_initialized) {
         return -1;
@@ -823,6 +854,10 @@ int gsound_background_play_preloaded()
 // 0x4483E4
 void gsound_background_stop()
 {
+    if (gsound_event_hook != NULL) {
+        gsound_event_hook(GSOUND_EVENT_MUSIC_STOP, "", 0, 0, 0);
+    }
+
     if (gsound_initialized && gsound_background_enabled && gsound_background_tag) {
         if (gsound_background_fade) {
             if (soundFade(gsound_background_tag, 2000, 0) == 0) {
@@ -979,6 +1014,11 @@ int gsound_speech_play(const char* fname, int a2, int a3, int a4)
     // uninline
     gsound_speech_stop();
 
+    // After the stop above, which reports itself.
+    if (gsound_event_hook != NULL) {
+        gsound_event_hook(GSOUND_EVENT_SPEECH, fname, a2, a3, a4);
+    }
+
     if (gsound_background_allocate(&gsound_speech_tag, a3, a4)) {
         if (gsound_debug) {
             debug_printf("failed because sound could not be allocated.\n");
@@ -1107,6 +1147,10 @@ int gsound_speech_play_preloaded()
 // 0x448954
 void gsound_speech_stop()
 {
+    if (gsound_event_hook != NULL) {
+        gsound_event_hook(GSOUND_EVENT_SPEECH_STOP, "", 0, 0, 0);
+    }
+
     if (gsound_initialized && gsound_speech_enabled) {
         if (gsound_speech_tag != NULL) {
             soundDelete(gsound_speech_tag);
@@ -1149,6 +1193,7 @@ int gsound_play_sfx_file_volume(const char* a1, int a2)
         return -1;
     }
 
+    gsound_report_effect(v1);
     soundPlay(v1);
 
     return 0;
@@ -1194,6 +1239,10 @@ Sound* gsound_load_sound(const char* name, Object* object)
     if (soundLoad(sound, path) == 0) {
         if (gsound_debug) {
             debug_printf("succeeded.\n");
+        }
+
+        if (gsound_event_hook != NULL) {
+            gsound_loaded_effects[sound] = { name, VOLUME_MAX };
         }
 
         return sound;
@@ -1278,6 +1327,11 @@ Sound* gsound_load_sound_volume(const char* name, Object* object, int volume)
 
     if (sound != NULL) {
         soundVolume(sound, (volume * sndfx_volume) / VOLUME_MAX);
+
+        auto it = gsound_loaded_effects.find(sound);
+        if (it != gsound_loaded_effects.end()) {
+            it->second.volume = volume;
+        }
     }
 
     return sound;
@@ -1286,6 +1340,8 @@ Sound* gsound_load_sound_volume(const char* name, Object* object, int volume)
 // 0x448DBC
 void gsound_delete_sfx(Sound* sound)
 {
+    gsound_loaded_effects.erase(sound);
+
     if (!gsound_initialized) {
         return;
     }
@@ -1326,6 +1382,7 @@ int gsnd_anim_sound(Sound* sound, void* a2)
         return 0;
     }
 
+    gsound_report_effect(sound);
     soundPlay(sound);
 
     return 0;
@@ -1346,6 +1403,7 @@ int gsound_play_sound(Sound* sound)
         return -1;
     }
 
+    gsound_report_effect(sound);
     soundPlay(sound);
 
     return 0;
@@ -1621,6 +1679,7 @@ int gsound_play_sfx_file(const char* name)
         return -1;
     }
 
+    gsound_report_effect(sound);
     soundPlay(sound);
 
     return 0;

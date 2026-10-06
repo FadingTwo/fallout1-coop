@@ -3,11 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <vector>
 #include <time.h>
 
 #include "game/actions.h"
 #include "game/automap.h"
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/elevator.h"
 #include "game/endgame.h"
@@ -366,6 +369,15 @@ int gtime_q_process(Object* obj, void* data)
 
     rc = critter_check_rads(obj_dude);
 
+    // Co-op: the other players can get radiation sickness too.
+    for (int index = 0; index < coop_player_count(); index++) {
+        PlayerState* player = coop_player(index);
+        if (player->obj != obj_dude) {
+            ActivePlayerScope scope(player);
+            critter_check_rads(obj_dude);
+        }
+    }
+
     queue_clear_type(EVENT_TYPE_GAME_TIME, NULL);
 
     gtime_q_add();
@@ -531,6 +543,66 @@ int scr_set_action_num(int sid, int value)
     scr->actionBeingUsed = value;
 
     return 0;
+}
+
+// Co-op: the talking head `obj`'s dialog uses, for trading without a
+// conversation (gdialog_barter()). Looks for its script's
+// start_gdialog(..., head, background) with constant head and background:
+// `push int head, push int background, start_gdialog` in the bytecode.
+bool scr_find_dialog_head(Object* obj, int* headPtr, int* backgroundPtr)
+{
+    Script* script;
+    if (obj == NULL || obj->sid == -1 || scr_ptr(obj->sid, &script) == -1) {
+        return false;
+    }
+
+    char name[16];
+    if (scr_list_str(script->scr_script_idx, name, sizeof(name)) == -1) {
+        return false;
+    }
+
+    char* pch = strchr(name, '.');
+    if (pch != NULL) {
+        *pch = '\0';
+    }
+
+    char path[COMPAT_MAX_PATH];
+    snprintf(path, sizeof(path), "%s%s%s.int", cd_path_base, script_path_base, name);
+
+    DB_FILE* stream = db_fopen(path, "rb");
+    if (stream == NULL) {
+        return false;
+    }
+
+    long length = db_filelength(stream);
+    std::vector<unsigned char> data(length > 0 ? length : 0);
+    bool read = length > 0 && db_fread(data.data(), 1, length, stream) == (size_t)length;
+    db_fclose(stream);
+    if (!read) {
+        return false;
+    }
+
+    auto readInt = [&](size_t pos) {
+        return (int)(((unsigned)data[pos] << 24) | ((unsigned)data[pos + 1] << 16) | ((unsigned)data[pos + 2] << 8) | data[pos + 3]);
+    };
+
+    for (size_t pos = 12; pos + 2 <= data.size(); pos++) {
+        if (data[pos] != 0x80 || data[pos + 1] != 0xDE) {
+            continue;
+        }
+        if (data[pos - 12] != 0xC0 || data[pos - 11] != 0x01 || data[pos - 6] != 0xC0 || data[pos - 5] != 0x01) {
+            continue;
+        }
+        int head = readInt(pos - 10);
+        int background = readInt(pos - 4);
+        if (head >= 0 && head < 1000 && background >= 0 && background < 1000) {
+            *headPtr = head;
+            *backgroundPtr = background;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // 0x491E68
@@ -1286,7 +1358,7 @@ int scr_set_dude_script()
     }
 
     Proto* proto;
-    if (proto_ptr(0x1000000, &proto) == -1) {
+    if (proto_ptr(obj_dude->pid, &proto) == -1) {
         debug_printf("Error in scr_set_dude_script: can't find obj_dude proto!");
         return -1;
     }
@@ -2006,6 +2078,9 @@ int scr_new(int* sidPtr, int scriptType)
 
     Script* scr = &(scriptListExtent->scripts[scriptListExtent->length]);
     scr->scr_id = sid;
+    // CE: Never used, but saved; left uninitialized it made saves
+    // nondeterministic.
+    scr->scr_next = 0;
     scr->sp.built_tile = -1;
     scr->sp.radius = -1;
     scr->scr_flags = 0;

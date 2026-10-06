@@ -49,6 +49,8 @@ target_sources(${EXECUTABLE_NAME} PUBLIC
     "src/game/anim.h"
     "src/game/art.cc"
     "src/game/art.h"
+    "src/game/autotest.cc"
+    "src/game/autotest.h"
     "src/game/automap.cc"
     "src/game/automap.h"
     "src/game/bmpdlog.cc"
@@ -58,6 +60,29 @@ target_sources(${EXECUTABLE_NAME} PUBLIC
     "src/game/combat_defs.h"
     "src/game/combat.cc"
     "src/game/combat.h"
+    "src/game/coop.cc"
+    "src/game/coop.h"
+    "src/game/coop_autotest.cc"
+    "src/game/coop_autotest.h"
+    "src/game/coop_crash.cc"
+    "src/game/coop_crash.h"
+    "src/game/coop_host.cc"
+
+    "src/game/coop_lobby.cc"
+
+    "src/game/coop_lobby.h"
+    "src/game/coop_host.h"
+    "src/game/coop_http.cc"
+    "src/game/coop_http.h"
+    "src/game/coop_menu.cc"
+    "src/game/coop_menu.h"
+    "src/game/coop_setup.cc"
+    "src/game/coop_setup.h"
+    "src/game/coop_setup_font.h"
+    "src/game/coop_update.cc"
+    "src/game/coop_update.h"
+    "src/game/coop_net.cc"
+    "src/game/coop_net.h"
     "src/game/combatai.cc"
     "src/game/combatai.h"
     "src/game/config.cc"
@@ -231,6 +256,8 @@ target_sources(${EXECUTABLE_NAME} PUBLIC
     "src/plib/gnw/dxinput.h"
     "src/plib/gnw/grbuf.cc"
     "src/plib/gnw/grbuf.h"
+    "src/plib/gnw/inject.cc"
+    "src/plib/gnw/inject.h"
     "src/plib/gnw/input.cc"
     "src/plib/gnw/input.h"
     "src/plib/gnw/gnw_types.h"
@@ -358,6 +385,19 @@ add_subdirectory("third_party/fpattern")
 target_link_libraries(${EXECUTABLE_NAME} fpattern::fpattern)
 
 target_link_libraries(${EXECUTABLE_NAME} ${SDL2_LIBRARIES})
+
+if(WIN32)
+    # Co-op networking (WinHTTP for the update/report server).
+    target_link_libraries(${EXECUTABLE_NAME} ws2_32 winhttp)
+else()
+    # Co-op: OpenSSL is loaded at run time for https://.
+    target_link_libraries(${EXECUTABLE_NAME} ${CMAKE_DL_LIBS})
+endif()
+
+# Co-op server built in for UPDATE and REPORT BUG (fallout.cfg [coop]
+# server= overrides it), e.g. -DCOOP_SERVER=http://your.server:8080
+set(COOP_SERVER "" CACHE STRING "Default co-op server URL")
+target_compile_definitions(${EXECUTABLE_NAME} PRIVATE COOP_DEFAULT_SERVER="${COOP_SERVER}")
 target_include_directories(${EXECUTABLE_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
 
 if(APPLE)

@@ -1,0 +1,13 @@
+#!/bin/sh
+# zig c++ for Windows, smoothing over two linker differences:
+# --undefined (SDL2main asks for WinMain) is unknown, and -mwindows is
+# ignored, so ask for the GUI subsystem directly.
+for a in "$@"; do
+  case "$a" in
+    -Wl,--undefined=*) ;;
+    -mwindows) set -- "$@" "-Wl,--subsystem,windows" ;;
+    *) set -- "$@" "$a" ;;
+  esac
+  shift
+done
+exec python3 -m ziglang c++ -target x86_64-windows-gnu "$@"

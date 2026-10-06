@@ -55,7 +55,7 @@ void debug_register_mono()
 // 0x4B2DD8
 void debug_register_log(const char* fileName, const char* mode)
 {
-    if ((mode[0] == 'w' && mode[1] == 'a') && mode[1] == 't') {
+    if ((mode[0] == 'w' || mode[0] == 'a') && mode[1] == 't') {
         if (fd != NULL) {
             fclose(fd);
         }
@@ -95,8 +95,9 @@ void debug_register_env()
     compat_strlwr(copy);
 
     if (strcmp(copy, "mono") == 0) {
-        // NOTE: Uninline.
-        debug_register_mono();
+        // CE: The monochrome adapter writes straight to DOS video memory
+        // (0xB0000) and would crash; print to stdout instead.
+        debug_register_screen();
     } else if (strcmp(copy, "log") == 0) {
         debug_register_log("debug.log", "wt");
     } else if (strcmp(copy, "screen") == 0) {
@@ -129,6 +130,51 @@ void debug_register_func(DebugFunc* proc)
     }
 }
 
+// CE: The most recent debug output, kept even when it goes nowhere, for
+// bug reports.
+#define DEBUG_RECENT_SIZE (48 * 1024)
+
+static char debug_recent[DEBUG_RECENT_SIZE];
+static size_t debug_recent_start = 0;
+static size_t debug_recent_length = 0;
+
+static void debug_remember(const char* string)
+{
+    for (const char* p = string; *p != '\0'; p++) {
+        debug_recent[(debug_recent_start + debug_recent_length) % DEBUG_RECENT_SIZE] = *p;
+        if (debug_recent_length < DEBUG_RECENT_SIZE) {
+            debug_recent_length++;
+        } else {
+            debug_recent_start = (debug_recent_start + 1) % DEBUG_RECENT_SIZE;
+        }
+    }
+}
+
+void debug_get_recent_parts(const char** first, size_t* firstLength, const char** second, size_t* secondLength)
+{
+    size_t start = debug_recent_start;
+    size_t length = debug_recent_length;
+    *first = debug_recent + start;
+    *firstLength = start + length <= DEBUG_RECENT_SIZE ? length : DEBUG_RECENT_SIZE - start;
+    *second = debug_recent;
+    *secondLength = length - *firstLength;
+}
+
+size_t debug_get_recent(char* buffer, size_t size)
+{
+    if (size == 0) {
+        return 0;
+    }
+
+    size_t length = debug_recent_length < size - 1 ? debug_recent_length : size - 1;
+    size_t first = debug_recent_start + (debug_recent_length - length);
+    for (size_t index = 0; index < length; index++) {
+        buffer[index] = debug_recent[(first + index) % DEBUG_RECENT_SIZE];
+    }
+    buffer[length] = '\0';
+    return length;
+}
+
 // 0x4B3008
 int debug_printf(const char* format, ...)
 {
@@ -137,14 +183,15 @@ int debug_printf(const char* format, ...)
 
     int rc;
 
-    if (debug_func != NULL) {
-        char string[260];
-        vsnprintf(string, sizeof(string), format, args);
+    char string[260];
+    vsnprintf(string, sizeof(string), format, args);
+    debug_remember(string);
 
+    if (debug_func != NULL) {
         rc = debug_func(string);
     } else {
 #ifdef _DEBUG
-        SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, format, args);
+        SDL_LogMessage(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, "%s", string);
 #endif
         rc = -1;
     }

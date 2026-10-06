@@ -17,8 +17,13 @@ void FpsLimiter::mark()
 
 void FpsLimiter::throttle() const
 {
-    if (1000 / _fps > SDL_GetTicks() - _ticks) {
-        SDL_Delay(1000 / _fps - (SDL_GetTicks() - _ticks));
+    // CE: the time is read once. Reading it twice, a pause of more than a
+    // frame between the reads (a busy machine) made the subtraction wrap
+    // around, and the game slept for weeks: it froze.
+    unsigned int frameTime = 1000 / _fps;
+    unsigned int elapsed = SDL_GetTicks() - _ticks;
+    if (elapsed < frameTime) {
+        SDL_Delay(frameTime - elapsed);
     }
 }
 

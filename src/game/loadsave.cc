@@ -11,6 +11,7 @@
 #include "game/bmpdlog.h"
 #include "game/combat.h"
 #include "game/combatai.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/display.h"
@@ -216,7 +217,8 @@ static SaveGameHandler* master_save_list[LOAD_SAVE_HANDLER_COUNT] = {
     skill_use_slot_save,
     partyMemberSave,
     intface_save,
-    DummyFunc,
+    // Co-op: writes nothing unless there is a player 2, see coop.h.
+    coop_save,
 };
 
 // 0x5059FC
@@ -341,6 +343,14 @@ int SaveGame(int mode)
     MessageListItem messageListItem;
 
     ls_error_code = 0;
+
+    // Co-op: only player 1 saves.
+    if (!coop_primary_is_active()) {
+        // display_print() writes into the string while wrapping.
+        char message[] = "Only player 1 can save the game.";
+        display_print(message);
+        return 0;
+    }
 
     if (!config_get_string(&game_config, GAME_CONFIG_SYSTEM_KEY, GAME_CONFIG_MASTER_PATCHES_KEY, &patches)) {
         debug_printf("\nLOADSAVE: Error reading patches config variable! Using default.\n");
@@ -801,6 +811,14 @@ int SaveGame(int mode)
     }
 
     return rc;
+}
+
+// Makes the next quick save/load use `slot` (0-based) without asking.
+// Used by the automated test harness.
+void lsgSetQuickSlot(int slot)
+{
+    slot_cursor = slot;
+    quick_done = true;
 }
 
 // 0x46E6C8
@@ -2301,6 +2319,11 @@ static int PrepLoad(DB_FILE* stream)
 // 0x471474
 static int EndLoad(DB_FILE* stream)
 {
+    // Co-op data follows all regular data (see master_save_list).
+    if (coop_load(stream) == -1) {
+        return -1;
+    }
+
     PlayCityMapMusic();
     critter_pc_set_name(LSData[slot_cursor].characterName);
     intface_redraw();

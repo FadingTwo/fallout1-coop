@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "game/coop.h"
 #include "int/export.h"
 #include "int/intlib.h"
 #include "int/memdbg.h"
@@ -2560,7 +2561,12 @@ void interpret(Program* program, int a2)
 
     currentProgram = program;
 
+    // A script error longjmps back here, skipping the destructors of any
+    // ActivePlayerScope entered meanwhile.
+    int coopScopeDepth = coop_scope_depth();
+
     if (setjmp(program->env)) {
+        coop_scope_unwind_to(coopScopeDepth);
         currentProgram = oldCurrentProgram;
         program->flags |= PROGRAM_FLAG_EXITED | PROGRAM_FLAG_0x04;
         return;

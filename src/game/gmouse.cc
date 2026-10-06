@@ -6,6 +6,7 @@
 
 #include "game/actions.h"
 #include "game/art.h"
+#include "game/cache.h"
 #include "game/combat.h"
 #include "game/critter.h"
 #include "game/game.h"
@@ -2395,7 +2396,11 @@ void gmouse_remove_item_outline(Object* object)
 
 void gameMouseRefreshImmediately()
 {
-    gmouse_bk_process();
+    // CE: called while files are read; moving the cursor locks art, which
+    // must wait while a cache is filling an entry (see cache_add).
+    if (!cache_is_loading()) {
+        gmouse_bk_process();
+    }
     renderPresent();
 }
 

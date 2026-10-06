@@ -7,6 +7,7 @@
 #include "game/actions.h"
 #include "game/combat.h"
 #include "game/combatai.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/display.h"
@@ -594,6 +595,10 @@ bool dialog_active()
 // 0x43DE28
 void gdialog_enter(Object* target, int a2)
 {
+    // Co-op: dialog is always player 1's, even when another player's
+    // action made a script start it.
+    ActivePlayerScope scope(coop_player(0));
+
     gdDialogWentOff = false;
 
     if (isInCombat()) {
@@ -959,6 +964,13 @@ static int gdialog_unhide_reply()
 // 0x43E524
 void gdialog_display_msg(char* msg)
 {
+    // Co-op: trading without a conversation (gdialog_barter()) has no
+    // reply window; use the message monitor.
+    if (gReplyWin == -1) {
+        display_print(msg);
+        return;
+    }
+
     if (gd_replyWin == -1) {
         debug_printf("\nError: Reply window doesn't exist!");
     }
@@ -2812,6 +2824,112 @@ static int talk_to_create_barter_win()
     barterer_temp_obj->flags |= OBJECT_HIDDEN | OBJECT_NO_SAVE;
     barterer_temp_obj->sid = -1;
     return 0;
+}
+
+// Co-op: a player other than player 1 trades with `target` without a
+// conversation (conversations are player 1's), on the dialog screen's
+// barter panel.
+void gdialog_barter(Object* target)
+{
+    if (isInCombat() || target == NULL || dialogueBackWindow != -1) {
+        return;
+    }
+
+    Proto* proto;
+    if (proto_ptr(target->pid, &proto) == -1 || (proto->critter.data.flags & CRITTER_BARTER) == 0) {
+        return;
+    }
+
+    map_disable_bk_processes();
+    cycle_disable();
+    gmouse_3d_off();
+    gmouse_set_cursor(MOUSE_CURSOR_ARROW);
+    gmouse_disable_scrolling();
+
+    Object* oldTarget = dialog_target;
+    int oldState = dialogue_state;
+    dialog_target = target;
+    gdBarterMod = 0;
+
+    // The regular dialog screen, switched straight to trading: with the
+    // merchant's talking head when their dialog has one, else (like such
+    // dialogs) the map around them.
+    int head;
+    int background;
+    {
+        if (scr_find_dialog_head(target, &head, &background)) {
+            dialogue_head = art_id(OBJ_TYPE_HEAD, head, 0, 0, 0);
+            gdialog_set_background(background);
+        } else {
+            dialogue_head = -1;
+        }
+
+        int mood = FIDGET_NEUTRAL;
+        switch (reaction_to_level(reaction_get(target))) {
+        case NPC_REACTION_BAD:
+            mood = FIDGET_BAD;
+            break;
+        case NPC_REACTION_GOOD:
+            mood = FIDGET_GOOD;
+            break;
+        }
+        gdCenterTile = tile_center_tile;
+        gdPlayerTile = obj_dude->tile;
+        if (scr_dialogue_init(dialogue_head, mood) == 0) {
+            talk_to_destroy_dialogue_win();
+            if (talk_to_create_barter_win() == 0) {
+                dialogue_state = 4;
+                if (fidgetFp != NULL) {
+                    talk_to_display_frame(fidgetFp, 0);
+                }
+                barter_inventory(dialogueWindow, dialog_target, peon_table_obj, barterer_table_obj, gdBarterMod);
+                dialogue_barter_cleanup_tables();
+                talk_to_destroy_barter_win();
+            }
+
+            // Nothing left for scr_dialogue_exit() to close but the head.
+            dialogue_state = 0;
+            dialogue_switch_mode = 0;
+            scr_dialogue_exit();
+        }
+
+        dialogue_head = -1;
+        dialogue_state = oldState;
+        dialog_target = oldTarget;
+
+        gmouse_enable_scrolling();
+        gmouse_3d_on();
+        cycle_enable();
+        map_enable_bk_processes();
+        tile_refresh_display();
+        return;
+    }
+
+    if (talk_to_create_background_window() == 0) {
+        dialogue_just_started = 0;
+        talk_to_refresh_background_window();
+
+        if (talk_to_create_barter_win() == 0) {
+            barter_inventory(dialogueWindow, dialog_target, peon_table_obj, barterer_table_obj, gdBarterMod);
+            dialogue_barter_cleanup_tables();
+        }
+
+        if (dialogueWindow != -1) {
+            talk_to_destroy_barter_win();
+        }
+
+        win_delete(dialogueBackWindow);
+        dialogueBackWindow = -1;
+    }
+
+    dialogue_state = oldState;
+    dialog_target = oldTarget;
+
+    gmouse_enable_scrolling();
+    gmouse_3d_on();
+    cycle_enable();
+    map_enable_bk_processes();
+    tile_refresh_display();
 }
 
 // 0x440CEC

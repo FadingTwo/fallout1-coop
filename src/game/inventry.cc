@@ -13,6 +13,7 @@
 #include "game/bmpdlog.h"
 #include "game/combat.h"
 #include "game/combatai.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -222,12 +223,14 @@ static int exit_move_timer_win(int inventoryWindowType);
 static int inven_cur_disp = 6;
 
 // 0x505640
-static Object* inven_dude = NULL;
+// Per player, see coop.h.
+#define inven_dude (coop_active_player()->inventoryOwner)
 
 // Probably fid of armor to display in inventory dialog.
 //
 // 0x505644
-static int inven_pid = -1;
+// Per player, see coop.h.
+#define inven_pid (coop_active_player()->inventoryPid)
 
 // 0x505648
 static bool inven_is_initialized = false;
@@ -359,7 +362,8 @@ void inven_set_dude(Object* obj, int pid)
 void inven_reset_dude()
 {
     inven_dude = obj_dude;
-    inven_pid = 0x1000000;
+    // Called once before obj_dude exists.
+    inven_pid = obj_dude != NULL ? obj_dude->pid : 0x1000000;
 }
 
 // 0x46240C

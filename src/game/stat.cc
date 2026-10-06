@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "game/combat.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/game.h"
@@ -26,6 +27,8 @@
 #include "plib/gnw/memory.h"
 
 namespace fallout {
+
+static int stat_pc_add_experience_one(int xp);
 
 // Provides metadata about stats.
 typedef struct StatDescription {
@@ -100,6 +103,17 @@ static char* level_description[PRIMARY_STAT_RANGE];
 // 0x6651FC
 static int curr_pc_stat[PC_STAT_COUNT];
 
+// Karma and reputation are shared between co-op players and stay in
+// `curr_pc_stat`; everything else is per player, see coop.h.
+static int* pc_stat_ptr(int pc_stat)
+{
+    if (pc_stat == PC_STAT_REPUTATION || pc_stat == PC_STAT_KARMA) {
+        return &(curr_pc_stat[pc_stat]);
+    }
+
+    return &(coop_active_player()->pcStats[pc_stat]);
+}
+
 // 0x49C2F0
 int stat_init()
 {
@@ -160,7 +174,7 @@ int stat_load(DB_FILE* stream)
     int pc_stat;
 
     for (pc_stat = 0; pc_stat < PC_STAT_COUNT; pc_stat++) {
-        if (db_freadInt(stream, &(curr_pc_stat[pc_stat])) == -1) {
+        if (db_freadInt(stream, pc_stat_ptr(pc_stat)) == -1) {
             return -1;
         }
     }
@@ -174,7 +188,7 @@ int stat_save(DB_FILE* stream)
     int pc_stat;
 
     for (pc_stat = 0; pc_stat < PC_STAT_COUNT; pc_stat++) {
-        if (db_fwriteInt(stream, curr_pc_stat[pc_stat]) == -1) {
+        if (db_fwriteInt(stream, *pc_stat_ptr(pc_stat)) == -1) {
             return -1;
         }
     }
@@ -236,7 +250,9 @@ int stat_get_base(Object* critter, int stat)
 {
     int value = stat_get_base_direct(critter, stat);
 
-    if (critter == obj_dude) {
+    PlayerState* player = coop_player_of(critter);
+    if (player != NULL) {
+        ActivePlayerScope scope(player);
         value += trait_adjust_stat(stat);
     }
 
@@ -249,7 +265,11 @@ int stat_get_base_direct(Object* critter, int stat)
     Proto* proto;
 
     if (stat >= 0 && stat < SAVEABLE_STAT_COUNT) {
-        proto_ptr(critter->pid, &proto);
+        // CE: only critters have stats; other objects (a door hit in a
+        // fight, say) used to read past their smaller proto.
+        if (PID_TYPE(critter->pid) != OBJ_TYPE_CRITTER || proto_ptr(critter->pid, &proto) == -1) {
+            return 0;
+        }
         return proto->critter.data.baseStats[stat];
     } else {
         switch (stat) {
@@ -269,8 +289,11 @@ int stat_get_base_direct(Object* critter, int stat)
 int stat_get_bonus(Object* critter, int stat)
 {
     if (stat >= 0 && stat < SAVEABLE_STAT_COUNT) {
+        // CE: only critters (see stat_get_base_direct).
         Proto* proto;
-        proto_ptr(critter->pid, &proto);
+        if (PID_TYPE(critter->pid) != OBJ_TYPE_CRITTER || proto_ptr(critter->pid, &proto) == -1) {
+            return 0;
+        }
         return proto->critter.data.bonusStats[stat];
     }
 
@@ -292,7 +315,9 @@ int stat_set_base(Object* critter, int stat, int value)
             return -1;
         }
 
-        if (critter == obj_dude) {
+        PlayerState* player = coop_player_of(critter);
+        if (player != NULL) {
+            ActivePlayerScope scope(player);
             value -= trait_adjust_stat(stat);
         }
 
@@ -332,7 +357,9 @@ int inc_stat(Object* critter, int stat)
 {
     int value = stat_get_base_direct(critter, stat);
 
-    if (critter == obj_dude) {
+    PlayerState* player = coop_player_of(critter);
+    if (player != NULL) {
+        ActivePlayerScope scope(player);
         value += trait_adjust_stat(stat);
     }
 
@@ -344,7 +371,9 @@ int dec_stat(Object* critter, int stat)
 {
     int value = stat_get_base_direct(critter, stat);
 
-    if (critter == obj_dude) {
+    PlayerState* player = coop_player_of(critter);
+    if (player != NULL) {
+        ActivePlayerScope scope(player);
         value += trait_adjust_stat(stat);
     }
 
@@ -448,7 +477,7 @@ char* stat_level_description(int value)
 // 0x49CAD4
 int stat_pc_get(int pc_stat)
 {
-    return pc_stat >= 0 && pc_stat < PC_STAT_COUNT ? curr_pc_stat[pc_stat] : 0;
+    return pc_stat >= 0 && pc_stat < PC_STAT_COUNT ? *pc_stat_ptr(pc_stat) : 0;
 }
 
 // 0x49CAE8
@@ -468,7 +497,7 @@ int stat_pc_set(int pc_stat, int value)
         return -3;
     }
 
-    curr_pc_stat[pc_stat] = value;
+    *pc_stat_ptr(pc_stat) = value;
 
     if (pc_stat == PC_STAT_EXPERIENCE) {
         rc = stat_pc_add_experience(0);
@@ -485,7 +514,13 @@ void stat_pc_set_defaults()
     int pc_stat;
 
     for (pc_stat = 0; pc_stat < PC_STAT_COUNT; pc_stat++) {
-        curr_pc_stat[pc_stat] = pc_stat_data[pc_stat].defaultValue;
+        // Shared stats belong to player 1; setting up player 2 must not
+        // reset them.
+        if ((pc_stat == PC_STAT_REPUTATION || pc_stat == PC_STAT_KARMA) && !coop_primary_is_active()) {
+            continue;
+        }
+
+        *pc_stat_ptr(pc_stat) = pc_stat_data[pc_stat].defaultValue;
     }
 }
 
@@ -571,8 +606,23 @@ int stat_result(Object* critter, int stat, int modifier, int* howMuch)
     return ROLL_FAILURE;
 }
 
-// 0x49CC3C
+// Co-op: every player earns the full amount (each with their own perks).
 int stat_pc_add_experience(int xp)
+{
+    if (coop_player_count() <= 1) {
+        return stat_pc_add_experience_one(xp);
+    }
+
+    for (int index = 0; index < coop_player_count(); index++) {
+        ActivePlayerScope scope(coop_player(index));
+        stat_pc_add_experience_one(xp);
+    }
+
+    return 0;
+}
+
+// 0x49CC3C
+static int stat_pc_add_experience_one(int xp)
 {
     xp += perk_level(PERK_SWIFT_LEARNER) * 5 * xp / 100;
     xp += stat_pc_get(PC_STAT_EXPERIENCE);
@@ -585,7 +635,7 @@ int stat_pc_add_experience(int xp)
         xp = pc_stat_data[PC_STAT_EXPERIENCE].maximumValue;
     }
 
-    curr_pc_stat[PC_STAT_EXPERIENCE] = xp;
+    *pc_stat_ptr(PC_STAT_EXPERIENCE) = xp;
 
     while (stat_pc_get(PC_STAT_LEVEL) < PC_LEVEL_MAX && xp >= stat_pc_min_exp()) {
         if (stat_pc_set(PC_STAT_LEVEL, stat_pc_get(PC_STAT_LEVEL) + 1) == 0) {

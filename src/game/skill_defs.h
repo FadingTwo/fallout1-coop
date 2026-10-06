@@ -8,6 +8,9 @@ namespace fallout {
 
 #define DEFAULT_TAGGED_SKILLS 3
 
+// Number of skill uses per day tracked for skill-use limits.
+#define SKILLS_MAX_USES_PER_DAY 3
+
 // Available skills.
 typedef enum Skill {
     SKILL_SMALL_GUNS,

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "game/anim.h"
+#include "game/coop.h"
 #include "game/game.h"
 #include "game/gconfig.h"
 #include "game/object.h"
@@ -51,10 +52,26 @@ static const char* head1 = "gggnnnbbbgnb";
 // 0x4FEBEC
 static const char* head2 = "vfngfbnfvppp";
 
-// Current native look base fid.
+// Current native look base fid. Per player, see coop.h.
 //
 // 0x4FEBF0
-int art_vault_guy_num = 0;
+int* art_vault_guy_num_ptr()
+{
+    return &(coop_active_player()->vaultGuyNum);
+}
+
+int art_critter_index(const char* name)
+{
+    char* fileName = art[OBJ_TYPE_CRITTER].fileNames;
+    for (int index = 0; index < art[OBJ_TYPE_CRITTER].fileNamesLength; index++) {
+        if (compat_strnicmp(fileName, name, strlen(name)) == 0 && (fileName[strlen(name)] == '\0' || fileName[strlen(name)] == '.')) {
+            return index;
+        }
+        fileName += 13;
+    }
+
+    return -1;
+}
 
 // 4FEBF4
 int art_vault_person_nums[GENDER_COUNT];

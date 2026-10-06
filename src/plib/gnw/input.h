@@ -17,6 +17,13 @@ typedef int(ScreenDumpFunc)(int width, int height, unsigned char* buffer, unsign
 int GNW_input_init(int use_msec_timer);
 void GNW_input_exit();
 int get_input();
+
+// CE: Like get_input(), but only consumes injected input (see inject.h) -
+// no system messages, no background processes. Lets the co-op host process
+// a remote player's input in between the regular frames.
+int get_injected_input();
+
+extern void (*input_poll_hook)();
 void get_input_position(int* x, int* y);
 void process_bk();
 void GNW_add_input_buffer(int a1);

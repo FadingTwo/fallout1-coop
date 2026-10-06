@@ -8,6 +8,7 @@
 #include "game/bmpdlog.h"
 #include "game/combat.h"
 #include "game/config.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/cycle.h"
 #include "game/game.h"
@@ -1814,7 +1815,11 @@ static int ListArchive(int a1)
 static void PipAlarm(int a1)
 {
     if (a1 == 1024) {
-        if (critter_can_obj_dude_rest()) {
+        if (!coop_primary_is_active()) {
+            // Co-op: only player 1 rests and waits.
+            gsound_play_sfx_file("iisxxxx1");
+            dialog_out("Only player 1 can rest.", NULL, 0, 192, 135, colorTable[32328], 0, colorTable[32328], DIALOG_BOX_LARGE);
+        } else if (critter_can_obj_dude_rest()) {
             NixHotLines();
             DrawAlarmText(0);
             AddHotLines(5, PIPBOY_REST_DURATION_COUNT_WITHOUT_PARTY, false);

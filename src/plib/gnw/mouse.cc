@@ -526,6 +526,28 @@ void mouse_info()
     }
 }
 
+void mouse_get_context(MouseContext* context)
+{
+    context->x = mouse_x;
+    context->y = mouse_y;
+    context->buttons = mouse_buttons;
+    context->rawX = raw_x;
+    context->rawY = raw_y;
+    context->rawButtons = raw_buttons;
+    context->lastButtons = last_buttons;
+}
+
+void mouse_set_context(const MouseContext* context)
+{
+    mouse_x = context->x;
+    mouse_y = context->y;
+    mouse_buttons = context->buttons;
+    raw_x = context->rawX;
+    raw_y = context->rawY;
+    raw_buttons = context->rawButtons;
+    last_buttons = context->lastButtons;
+}
+
 // 0x4B4ECC
 void mouse_simulate_input(int delta_x, int delta_y, int buttons)
 {

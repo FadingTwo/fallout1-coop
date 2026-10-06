@@ -8,6 +8,7 @@
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/combatai.h"
+#include "game/coop.h"
 #include "game/critter.h"
 #include "game/display.h"
 #include "game/endgame.h"
@@ -752,6 +753,29 @@ static void op_script_overrides(Program* program)
     }
 }
 
+// Co-op: scripts ask about "the player" (dude_obj, player 1) for quest
+// items. Either player may be carrying them, so for a player these look at
+// every player's inventory, and items are taken from whoever has them.
+static bool coop_shared_inventory(Object* obj)
+{
+    return obj != NULL && coop_player_count() > 1 && coop_player_of(obj) != NULL;
+}
+
+// The player who actually carries `item`, else `owner`.
+static Object* coop_item_holder(Object* owner, Object* item)
+{
+    if (!coop_shared_inventory(owner) || item_count(owner, item) > 0) {
+        return owner;
+    }
+    for (int index = 0; index < coop_player_count(); index++) {
+        Object* other = coop_player(index)->obj;
+        if (other != NULL && item_count(other, item) > 0) {
+            return other;
+        }
+    }
+    return owner;
+}
+
 // 0x44C738
 static void op_obj_is_carrying_obj_pid(Program* program)
 {
@@ -759,7 +783,13 @@ static void op_obj_is_carrying_obj_pid(Program* program)
     Object* obj = static_cast<Object*>(programStackPopPointer(program));
 
     int result = 0;
-    if (obj != NULL) {
+    if (coop_shared_inventory(obj)) {
+        for (int index = 0; index < coop_player_count(); index++) {
+            if (coop_player(index)->obj != NULL) {
+                result += inven_pid_quantity_carried(coop_player(index)->obj, pid);
+            }
+        }
+    } else if (obj != NULL) {
         result = inven_pid_quantity_carried(obj, pid);
     } else {
         dbg_error(program, "obj_is_carrying_obj_pid", SCRIPT_ERROR_OBJECT_IS_NULL);
@@ -1308,6 +1338,8 @@ static void op_rm_obj_from_inven(Program* program)
         return;
     }
 
+    owner = coop_item_holder(owner, item);
+
     bool updateFlags = false;
     int flags = 0;
 
@@ -1636,10 +1668,12 @@ static void objs_area_turn_on_off(int a1, int a2, int a3, int a4, int enabled)
     if (a3 > a4) {
         temp = a3;
         a3 = a4;
-        a4 = a3;
+        a4 = temp;
     }
 
-    while (a1 <= a2) {
+    // a1..a2 are elevations. (Upstream never advanced a1 and looped
+    // forever, hanging the game if a script used these opcodes.)
+    for (; a1 <= a2; a1++) {
         object = obj_find_first_at(a1);
         while (object != NULL) {
             if ((object->flags & OBJECT_HIDDEN) == enabled) {
@@ -2334,6 +2368,22 @@ static void op_radiation_inc(Program* program)
         return;
     }
 
+    // Co-op: radiation from the place itself (map and area scripts, like
+    // the Glow's) hits every player, not just the one scripts call the
+    // player.
+    if (coop_player_count() > 1 && coop_player_of(object) != NULL) {
+        int sid = scr_find_sid_from_program(program);
+        int type = sid != -1 ? SID_TYPE(sid) : -1;
+        if (type == SCRIPT_TYPE_SYSTEM || type == SCRIPT_TYPE_SPATIAL) {
+            for (int index = 0; index < coop_player_count(); index++) {
+                PlayerState* player = coop_player(index);
+                ActivePlayerScope scope(player);
+                critter_adjust_rads(player->obj, amount);
+            }
+            return;
+        }
+    }
+
     critter_adjust_rads(object, amount);
 }
 
@@ -2799,6 +2849,11 @@ static void op_obj_carrying_pid_obj(Program* program)
     Object* result = NULL;
     if (object != NULL) {
         result = inven_pid_is_carried_ptr(object, pid);
+        for (int index = 0; result == NULL && coop_shared_inventory(object) && index < coop_player_count(); index++) {
+            if (coop_player(index)->obj != NULL) {
+                result = inven_pid_is_carried_ptr(coop_player(index)->obj, pid);
+            }
+        }
     } else {
         dbg_error(program, "obj_carrying_pid_obj", SCRIPT_ERROR_OBJECT_IS_NULL);
     }
@@ -3007,6 +3062,8 @@ static void op_rm_mult_objs_from_inven(Program* program)
         // FIXME: Ruined stack.
         return;
     }
+
+    owner = coop_item_holder(owner, item);
 
     bool itemWasEquipped = (item->flags & OBJECT_EQUIPPED) != 0;
 
