@@ -18,7 +18,6 @@ Endpoints (plain HTTP):
                                     url_macos=...   (or url=... for all)
     POST /fallout-coop/report   saves the report (text, at most 1 MB) as
                                 <root>/reports/<time>-<address>.txt
-    GET/POST /fallout-coop/forum/...   an optional website forum (coop_forum.py, if present)
     POST /fallout-coop/lobby    a host lists its game (action=announce, port,
                                 players, version, checksum, name; one per
                                 line) or removes it (action=remove, port)
@@ -56,16 +55,8 @@ import socket
 import threading
 import time
 import json
-import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-# An optional forum for a website, if coop_forum.py is next to this file.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-try:
-    from coop_forum import Forum  # noqa: E402
-except ImportError:
-    Forum = None
 
 MAX_REPORT = 1024 * 1024
 PREFIX = "/fallout-coop/"
@@ -443,7 +434,6 @@ def _reports_full(reports):
 
 class Handler(BaseHTTPRequestHandler):
     root = "."
-    forum = None
 
     def _send(self, status, body=b"", content_type="text/plain; charset=utf-8"):
         self.send_response(status)
@@ -459,35 +449,10 @@ class Handler(BaseHTTPRequestHandler):
             address = self.headers.get("X-Real-IP")
         return address
 
-    def _forum(self, method):
-        """forum/... requests; False when the path is something else."""
-        url = urllib.parse.urlparse(self.path)
-        if not url.path.startswith(PREFIX + "forum/") or Handler.forum is None:
-            return False
-        body = b""
-        if method == "POST":
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                length = -1
-            if length <= 0 or length > 16 * 1024:
-                self._send(400, b'{"error": "Bad request."}', "application/json")
-                return True
-            body = self.rfile.read(length)
-        result = Handler.forum.handle(method, url.path[len(PREFIX + "forum/"):], urllib.parse.parse_qs(url.query),
-                                      body, self._address())
-        if result is None:
-            self._send(404, b'{"error": "Not found."}', "application/json")
-        else:
-            self._send(result[0], json.dumps(result[1]).encode(), "application/json")
-        return True
-
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         if not path.startswith(PREFIX):
             return self._send(404, b"not found\n")
-        if self._forum("GET"):
-            return
 
         # The admin panel, on this machine only (not through the web server).
         if path == PREFIX + "status":
@@ -565,8 +530,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
-        if self._forum("POST"):
-            return
         if path == PREFIX + "lobby":
             return self._lobby_post()
         if path != PREFIX + "report":
@@ -616,7 +579,6 @@ def main():
         threading.Thread(target=_relay_serve, args=(args.relay_bind, args.relay_port), daemon=True).start()
 
     Handler.root = os.path.abspath(args.root)
-    Handler.forum = Forum(Handler.root) if Forum is not None else None
     _stats_load(Handler.root)
     os.makedirs(os.path.join(Handler.root, "public"), exist_ok=True)
     print("Serving %s on %s:%d" % (Handler.root, args.bind, args.port), flush=True)

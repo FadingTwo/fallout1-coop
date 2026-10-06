@@ -12,13 +12,6 @@ explains the process.
 
 ![Two players in Junktown, each on their own computer: player 1's screen on the left, player 2's on the right](docs/coop/two-players.jpg)
 
-**To play, download from the website:** <https://thegreenturtles.dk/fallout-coop/>.
-Those packages use the co-op server there, so the server list, game codes
-(online play without port forwarding), in-game updates and bug reports
-work. The packages under [Releases](https://github.com/FadingTwo/fallout1-coop/releases)
-are built from this code without a server: they play on a LAN, on one PC
-or with a direct address.
-
 You need your own copy of Fallout (GOG or Steam). No game files are
 included. Co-op is off by default: without it the game plays exactly like
 Fallout CE.

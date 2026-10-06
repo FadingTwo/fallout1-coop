@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Side-by-side gameplay clip for the website from a video tour:
+# A side-by-side gameplay clip (both players' screens) from a video tour:
 #
 #   COOP_AUTOTEST_VIDEO=1 COOP_AUTOTEST_TOUR=JUNKENT.MAP,HUBDWNTN.MAP \
 #       tools/nettest.sh build/fallout-ce <out> net_tour_host net_tour_client

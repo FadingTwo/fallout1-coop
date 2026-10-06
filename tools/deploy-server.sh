@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Copies coop_server.py (and coop_forum.py, if present) to the co-op server
-# and restarts it, but only while nobody plays through the relay (a restart
-# drops those games). FORCE=1 restarts anyway.
+# Copies coop_server.py to the co-op server and restarts it, but only while
+# nobody plays through the relay (a restart drops those games). FORCE=1
+# restarts anyway.
 #
 #   DEPLOY_TARGET=user@host [DEPLOY_KEY=~/.ssh/key] tools/deploy-server.sh
 #
@@ -23,7 +23,5 @@ if [ "$playing" != "0" ] && [ -z "${FORCE:-}" ]; then
     exit 1
 fi
 
-files=("$here/coop_server.py")
-[ -f "$here/coop_forum.py" ] && files+=("$here/coop_forum.py")
-scp -q "${key_args[@]}" "${files[@]}" "$target:fallout-coop/"
+scp -q "${key_args[@]}" "$here/coop_server.py" "$target:fallout-coop/"
 "${ssh_cmd[@]}" 'sudo systemctl restart fallout-coop-report; sleep 1; systemctl is-active fallout-coop-report'
