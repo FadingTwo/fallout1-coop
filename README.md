@@ -50,6 +50,8 @@ For more about the engine itself (other platforms, `fallout.cfg`,
 - [docs/coop/HOW-IT-WAS-MADE.md](docs/coop/HOW-IT-WAS-MADE.md): how it
   was built, and why it works the way it does
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Ideas](https://github.com/FadingTwo/fallout1-coop/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement):
+  what could come next; comment or add a 👍 to the ones you want
 
 Build with `cmake -B build && cmake --build build` (needs SDL2), or build
 the Linux and Windows packages with `tools/build-release.sh`.
