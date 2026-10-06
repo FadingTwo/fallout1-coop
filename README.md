@@ -5,6 +5,11 @@ Fallout 1, built on [Fallout Community Edition](https://github.com/alexbatalov/f
 Player 1 hosts the game; player 2 joins over a LAN, the internet, or on
 the same PC, with their own character.
 
+**Built with AI.** The code, tests and docs were written by an AI coding
+assistant (Claude, by Anthropic). A person decided what to build, played
+it and set the priorities. [How it was made](docs/coop/HOW-IT-WAS-MADE.md)
+explains the process.
+
 ![Two players in Junktown, each on their own computer: player 1's screen on the left, player 2's on the right](docs/coop/two-players.jpg)
 
 You need your own copy of Fallout (GOG or Steam). No game files are
