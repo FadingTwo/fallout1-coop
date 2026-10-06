@@ -48,8 +48,7 @@ Paraphrased, roughly in order:
 10. *Find out why players drop out.* (The answer was delay on slow lines,
     which led to flow control, scaled and packed frames.)
 11. *Crash reports,* so crashes that players never report still get fixed.
-12. *Prepare the code for others: English, documented, and pointing at no
-    one's private server.*
+12. *Prepare the code for others: English and documented.*
 
 ## Design decisions
 
