@@ -12,7 +12,7 @@ behind it, so that others can follow the reasoning and continue the work.
 - **Tests before trust.** Early on a headless test harness was added: the
   game plays itself with scripted input, two processes play over
   localhost, and every map of the game can be visited with two players.
-  Most bugs in this mod were found this way, not by playing.
+  Most bugs in this mod were found this way.
 - **Single player is sacred.** With co-op off the game is compared byte
   for byte against upstream Fallout CE, so the mod can't quietly change
   the normal game.
