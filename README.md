@@ -5,6 +5,8 @@ Fallout 1, built on [Fallout Community Edition](https://github.com/alexbatalov/f
 Player 1 hosts the game; player 2 joins over a LAN, the internet, or on
 the same PC, with their own character.
 
+![Two players in Junktown, each on their own computer: player 1's screen on the left, player 2's on the right](docs/coop/two-players.jpg)
+
 You need your own copy of Fallout (GOG or Steam). No game files are
 included. Co-op is off by default: without it the game plays exactly like
 Fallout CE.
