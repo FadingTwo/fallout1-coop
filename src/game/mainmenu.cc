@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "game/art.h"
@@ -47,6 +48,7 @@ static const int main_menu_label_ids[MAIN_MENU_BUTTON_COUNT] = { 9, 10, 11, -1, 
 static int main_menu_fatal_error();
 static void main_menu_play_sound(const char* fileName);
 static void main_menu_draw_buttons(const char* const* labels, const int* keys, int count);
+static void main_menu_extend_panel();
 
 // 0x505A84
 static int main_window = -1;
@@ -155,6 +157,8 @@ int main_menu_create()
         main_window_buf,
         MAIN_MENU_WINDOW_WIDTH);
     art_ptr_unlock(background_key);
+
+    main_menu_extend_panel();
 
     int oldFont = text_curr();
     text_font(100);
@@ -408,6 +412,55 @@ int main_menu_loop()
     in_main_menu = false;
 
     return rc;
+}
+
+// CE: co-op adds a sixth button. The English background has six plates in
+// the panel (the last one unused); some translations' (e.g. the Polish one)
+// have five, which leaves EXIT below the panel. Then the panel is made one
+// plate longer: its bottom edge moves down and the fifth plate is repeated.
+static void main_menu_extend_panel()
+{
+    const int pitch = 41;
+    const int left = 395;
+    const int right = 615;
+    const int fifth = 37 + 4 * pitch;
+    const int sixth = fifth + pitch;
+    const int edge = 24;
+
+    // Plates look alike at their edges (frame, screws), scenery doesn't:
+    // different plates match at about 30%, scenery below the panel at 8%.
+    int same = 0;
+    int total = 0;
+    for (int y = 0; y < pitch; y++) {
+        for (int x = left + 8; x < right - 5; x++) {
+            if (x == left + 26) {
+                x = right - 19;
+            }
+            int a = main_window_buf[(fifth + y) * MAIN_MENU_WINDOW_WIDTH + x];
+            int b = main_window_buf[(sixth + y) * MAIN_MENU_WINDOW_WIDTH + x];
+            int distance = abs(cmap[a * 3] - cmap[b * 3]) + abs(cmap[a * 3 + 1] - cmap[b * 3 + 1]) + abs(cmap[a * 3 + 2] - cmap[b * 3 + 2]);
+            if (distance <= 6) {
+                same++;
+            }
+            total++;
+        }
+    }
+
+    if (same * 100 >= total * 18) {
+        return;
+    }
+
+    for (int y = edge - 1; y >= 0; y--) {
+        memcpy(main_window_buf + (sixth + pitch + y) * MAIN_MENU_WINDOW_WIDTH + left,
+            main_window_buf + (sixth + y) * MAIN_MENU_WINDOW_WIDTH + left,
+            right - left);
+    }
+
+    for (int y = 0; y < pitch; y++) {
+        memcpy(main_window_buf + (sixth + y) * MAIN_MENU_WINDOW_WIDTH + left,
+            main_window_buf + (fifth + y) * MAIN_MENU_WINDOW_WIDTH + left,
+            right - left);
+    }
 }
 
 // Puts `count` buttons with `labels` and hot `keys` into the panel.
